@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Database, Copy, Check, X, ShieldAlert, FileCode2, Terminal } from 'lucide-react';
-import { getSupabaseConfigStatus } from '../lib/supabase';
+import { Database, Copy, Check, X, ShieldAlert, FileCode2, Terminal, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { getSupabaseConfigStatus, SupabaseConnectionResult } from '../lib/supabase';
 
 interface SetupModalProps {
   isOpen: boolean;
   onClose: () => void;
+  dbStatus?: SupabaseConnectionResult;
+  onRefreshConnection?: () => Promise<void>;
 }
 
 const MIGRATION_SQL_SNIPPET = `-- Run this in Supabase Dashboard -> SQL Editor
@@ -117,10 +119,20 @@ CREATE POLICY "Allow public all quotes" ON public.quotes FOR ALL TO anon, authen
 CREATE POLICY "Allow public all bookings" ON public.bookings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public all reviews" ON public.reviews FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);`;
 
-export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onClose }) => {
+export const SetupModal: React.FC<SetupModalProps> = ({
+  isOpen,
+  onClose,
+  dbStatus,
+  onRefreshConnection,
+}) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [copied, setCopied] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+
+  // Single shared configuration check
   const status = getSupabaseConfigStatus();
+  const isConnected = dbStatus?.isConnected ?? false;
+  const connectionError = dbStatus?.error;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -164,6 +176,16 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onClose }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleTest = async () => {
+    if (!onRefreshConnection) return;
+    setIsTesting(true);
+    try {
+      await onRefreshConnection();
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   return (
     <dialog
       ref={dialogRef}
@@ -198,39 +220,74 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Current Connection Status Box */}
+        {/* Current Connection Status Box - Accurate & Synchronized */}
         <div
-          className={`p-4 rounded-xl border flex items-start gap-3 ${
-            status.isConfigured
+          className={`p-4 rounded-xl border flex items-start justify-between gap-3 ${
+            isConnected
               ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
-              : 'bg-amber-50 border-amber-200 text-amber-950'
+              : status.isConfigured
+              ? 'bg-amber-50 border-amber-300 text-amber-950'
+              : 'bg-slate-50 border-slate-200 text-slate-900'
           }`}
         >
-          <div
-            className={`w-3 h-3 rounded-full mt-1 shrink-0 ${
-              status.isConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-            }`}
-          />
-          <div className="space-y-1 text-xs sm:text-sm">
-            <h3 className="font-semibold">
-              {status.isConfigured
-                ? 'Supabase Credentials Detected & Active'
-                : 'Supabase Not Connected - Running in Local Preview Simulation'}
-            </h3>
-            <p className="text-xs opacity-90">
-              {status.isConfigured
-                ? `Connected to: ${status.url}`
-                : 'SkillNear is operating in pure local simulation mode. All data is held in memory and will NOT persist to PostgreSQL until configured.'}
-            </p>
-            {status.missingKeys.length > 0 && (
-              <div className="mt-2 text-xs font-mono bg-white/70 px-2.5 py-1.5 rounded border border-amber-300">
-                Missing environment variables:{' '}
-                <span className="font-bold text-amber-900">
-                  {status.missingKeys.join(', ')}
-                </span>
-              </div>
-            )}
+          <div className="flex items-start gap-3">
+            <div
+              className={`w-3 h-3 rounded-full mt-1 shrink-0 ${
+                isConnected
+                  ? 'bg-emerald-500 animate-pulse'
+                  : status.isConfigured
+                  ? 'bg-amber-500'
+                  : 'bg-slate-400'
+              }`}
+            />
+            <div className="space-y-1 text-xs sm:text-sm">
+              <h3 className="font-semibold">
+                {isConnected
+                  ? 'Supabase Database Connected & Verified Active'
+                  : status.isConfigured
+                  ? 'Supabase Credentials Detected — Live Database Inactive'
+                  : 'Supabase Not Configured — Running in Local Preview Simulation'}
+              </h3>
+              <p className="text-xs opacity-90">
+                {isConnected ? (
+                  <>
+                    Live database query verified on:{' '}
+                    <span className="font-mono font-medium">{status.url}</span>
+                  </>
+                ) : status.isConfigured ? (
+                  <>
+                    Credentials found for project{' '}
+                    <span className="font-mono font-medium">{status.url}</span>, but an actual database
+                    request did not succeed
+                    {connectionError ? ` (${connectionError})` : ''}.
+                    SkillNear is safely operating in simulation mode until tables are created.
+                  </>
+                ) : (
+                  'SkillNear is operating in pure local simulation mode. All data is held in memory and will NOT persist to PostgreSQL until configured.'
+                )}
+              </p>
+              {!status.isConfigured && status.missingKeys.length > 0 && (
+                <div className="mt-2 text-xs font-mono bg-white/70 px-2.5 py-1.5 rounded border border-amber-300">
+                  Missing environment variables:{' '}
+                  <span className="font-bold text-amber-900">
+                    {status.missingKeys.join(', ')}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
+
+          {onRefreshConnection && (
+            <button
+              type="button"
+              onClick={handleTest}
+              disabled={isTesting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-300 rounded-lg shadow-xs transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
+              <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
+            </button>
+          )}
         </div>
 
         {/* Step-by-Step Instructions */}
@@ -306,11 +363,21 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="pt-2 border-t border-slate-100 flex justify-end">
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500">
+            {isConnected ? (
+              <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                PostgreSQL persistence active
+              </span>
+            ) : (
+              <span>Simulation mode fallback active</span>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition-colors"
+            className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition-colors cursor-pointer"
           >
             Close
           </button>

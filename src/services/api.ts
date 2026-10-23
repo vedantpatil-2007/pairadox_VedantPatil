@@ -49,12 +49,25 @@ export const api = {
         if (data && data.length > 0) {
           return { data: data as Worker[], isLiveDatabase: true };
         }
+        if (data && data.length === 0) {
+          // Query succeeded but table has no rows yet; return empty or fallback
+          return { data: data as Worker[], isLiveDatabase: true };
+        }
       } catch (err: unknown) {
         console.warn('Supabase fetch workers failed, using local simulation state:', err);
+        const filtered =
+          !trade || trade === 'all'
+            ? localState.workers
+            : localState.workers.filter((w) => w.trade === trade);
+        return {
+          data: filtered,
+          isLiveDatabase: false,
+          error: (err as Error)?.message || 'Database query failed',
+        };
       }
     }
 
-    // Local fallback
+    // Local fallback when not configured
     const filtered =
       !trade || trade === 'all'
         ? localState.workers
@@ -148,6 +161,7 @@ export const api = {
         return { data: data as ServiceRequest, isLiveDatabase: true };
       } catch (err: unknown) {
         console.error('Supabase createServiceRequest error:', err);
+        localState.requests.unshift(newRequest);
         return {
           data: newRequest,
           isLiveDatabase: false,
@@ -285,8 +299,18 @@ export const api = {
         return { data: data as Quote, isLiveDatabase: true };
       } catch (err: unknown) {
         console.error('Supabase submitQuote error:', err);
+        localState.quotes.unshift(newQuote);
+        const req = localState.requests.find((r) => r.id === payload.request_id);
+        if (req && req.status === 'open') {
+          req.status = 'quoted';
+          req.updated_at = new Date().toISOString();
+        }
         return {
-          data: newQuote,
+          data: {
+            ...newQuote,
+            worker: localState.workers.find((w) => w.id === newQuote.worker_id),
+            request: localState.requests.find((r) => r.id === newQuote.request_id),
+          },
           isLiveDatabase: false,
           error: (err as Error).message || 'Failed to submit quote to Supabase.',
         };
@@ -432,8 +456,23 @@ export const api = {
         return { data: bookingData as Booking, isLiveDatabase: true };
       } catch (err: unknown) {
         console.error('Supabase confirmBooking error:', err);
+        localState.bookings.unshift(newBooking);
+        const quote = localState.quotes.find((q) => q.id === payload.quoteId);
+        if (quote) {
+          quote.status = 'accepted';
+          quote.updated_at = now;
+        }
+        const req = localState.requests.find((r) => r.id === payload.requestId);
+        if (req) {
+          req.status = 'booked';
+          req.updated_at = now;
+        }
         return {
-          data: newBooking,
+          data: {
+            ...newBooking,
+            worker: localState.workers.find((w) => w.id === newBooking.worker_id),
+            request: localState.requests.find((r) => r.id === newBooking.request_id),
+          },
           isLiveDatabase: false,
           error: (err as Error).message || 'Failed to persist booking in Supabase.',
         };

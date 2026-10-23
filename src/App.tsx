@@ -18,7 +18,7 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 import { Worker, ServiceRequest, Quote, Booking, UserLocation, Review } from './types';
 import { DEFAULT_LOCATION } from './lib/geo';
 import { api } from './services/api';
-import { isSupabaseConfigured } from './lib/supabase';
+import { isSupabaseConfigured, getSupabaseConfigStatus, verifySupabaseConnection, SupabaseConnectionResult } from './lib/supabase';
 
 export function App() {
   // Global Data State
@@ -39,7 +39,12 @@ export function App() {
   // Status & Errors
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLiveDatabase, setIsLiveDatabase] = useState(isSupabaseConfigured());
+  const [isLiveDatabase, setIsLiveDatabase] = useState(false);
+  const [dbStatus, setDbStatus] = useState<SupabaseConnectionResult>(() => ({
+    isConfigured: getSupabaseConfigStatus().isConfigured,
+    isConnected: false,
+    url: getSupabaseConfigStatus().url,
+  }));
 
   // Modal States
   const [locationModalOpen, setLocationModalOpen] = useState(false);
@@ -81,6 +86,12 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
+      // 1. Verify actual Supabase connection status with real request
+      const connectionResult = await verifySupabaseConnection();
+      setDbStatus(connectionResult);
+      setIsLiveDatabase(connectionResult.isConnected);
+
+      // 2. Load application data
       const [workersRes, requestsRes, quotesRes, bookingsRes] = await Promise.all([
         api.getWorkers(),
         api.getServiceRequests(),
@@ -92,7 +103,10 @@ export function App() {
       setRequests(requestsRes.data);
       setQuotes(quotesRes.data);
       setBookings(bookingsRes.data);
-      setIsLiveDatabase(workersRes.isLiveDatabase);
+
+      if (connectionResult.isConnected) {
+        setIsLiveDatabase(true);
+      }
 
       // Default active worker persona if not set
       if (!activeWorker && workersRes.data.length > 0) {
@@ -106,6 +120,32 @@ export function App() {
       setLoading(false);
     }
   }, [activeWorker]);
+
+  const handleRefreshConnection = useCallback(async () => {
+    const res = await verifySupabaseConnection();
+    setDbStatus(res);
+    setIsLiveDatabase(res.isConnected);
+    if (res.isConnected) {
+      addToast({
+        type: 'success',
+        title: 'Supabase Database Connected!',
+        description: 'Persistent PostgreSQL storage is verified and active.',
+      });
+      loadData();
+    } else if (res.isConfigured) {
+      addToast({
+        type: 'error',
+        title: 'Database Query Unsuccessful',
+        description: res.error || 'Please run the schema migration in Supabase SQL editor.',
+      });
+    } else {
+      addToast({
+        type: 'info',
+        title: 'Credentials Missing',
+        description: 'Please add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env.',
+      });
+    }
+  }, [addToast, loadData]);
 
   useEffect(() => {
     loadData();
@@ -219,6 +259,7 @@ export function App() {
       {/* Persistent Hackathon & Database Notice Banner */}
       <BannerDisclaimer
         isLiveDatabase={isLiveDatabase}
+        dbStatus={dbStatus}
         onOpenSetupModal={() => setSetupModalOpen(true)}
       />
 
@@ -326,6 +367,8 @@ export function App() {
       <SetupModal
         isOpen={setupModalOpen}
         onClose={() => setSetupModalOpen(false)}
+        dbStatus={dbStatus}
+        onRefreshConnection={handleRefreshConnection}
       />
 
       <PostRequestModal
