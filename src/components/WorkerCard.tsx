@@ -86,9 +86,9 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                 <span>{tradeInfo.label}</span>
               </span>
 
-              {/* Fictional Demo Badge */}
+              {/* Sample Profile Label */}
               <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
-                Demo Profile
+                Sample profile
               </span>
             </div>
 

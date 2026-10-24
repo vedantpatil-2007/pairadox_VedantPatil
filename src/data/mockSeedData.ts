@@ -19,7 +19,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Licensed residential wireman, MCB troubleshooting, inverter setup & short-circuit repair.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111102',
@@ -39,7 +39,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Fast response appliance wiring, ceiling fan replacement, switchboard retrofitting.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111103',
@@ -59,7 +59,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Master plumber specialized in concealed pipe leaks, motor installations, tap & valve overhauls.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111104',
@@ -79,7 +79,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Rapid drain unclogging, bathroom sanitaryware fitting, geyser connection specialist.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111105',
@@ -99,7 +99,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Eco-friendly deep home sanitization, kitchen degreasing, bathroom scrubbing, sofa shampooing.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111106',
@@ -119,7 +119,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Move-in/move-out deep cleaning, window pane cleaning, balcony dusting & kitchen detailing.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111107',
@@ -139,7 +139,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Interior wall emulsion, waterproof putty application, texture design, touch-up painting.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
   {
     id: '11111111-1111-1111-1111-111111111108',
@@ -159,7 +159,7 @@ export const INITIAL_DEMO_WORKERS: Worker[] = [
     bio: 'Fictional Demo Profile: Exterior weather-guard painting, damp proofing, wood polish & metal grill painting.',
     is_demo: true,
     is_available: true,
-    badge_label: 'Demo Profile (Fictional Simulation)',
+    badge_label: 'Sample profile',
   },
 ];
 

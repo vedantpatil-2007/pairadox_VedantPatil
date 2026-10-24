@@ -10,6 +10,7 @@ import {
   Layers,
   Wrench,
   Package,
+  Users,
 } from 'lucide-react';
 import { ServiceRequest, Quote } from '../types';
 import { getTradeBadge } from './WorkerCard';
@@ -122,6 +123,17 @@ export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
                     <span className="text-xs text-slate-400">
                       Posted {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
+                    {req.crew_size && req.crew_size > 1 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                        <Users className="w-3 h-3 text-indigo-600" />
+                        <span>Crew: {req.crew_size} Techs</span>
+                      </span>
+                    )}
+                    {req.organization_name && (
+                      <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                        Org: {req.organization_name}
+                      </span>
+                    )}
                   </div>
 
                   <h3 className="text-base font-bold text-slate-900">{req.title}</h3>
@@ -241,6 +253,17 @@ export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
                                 {/* FairDeal Itemized Chips */}
                                 {item && (
                                   <div className="flex items-center gap-2 mt-2 flex-wrap text-[11px]">
+                                    {item.offered_crew_size && item.offered_crew_size > 1 && (
+                                      <span className="bg-indigo-50 text-indigo-800 font-semibold px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
+                                        <Users className="w-3 h-3 text-indigo-600" />
+                                        <span>Crew: {item.offered_crew_size}</span>
+                                      </span>
+                                    )}
+                                    {typeof item.shortfall === 'number' && item.shortfall > 0 && (
+                                      <span className="bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-300">
+                                        Shortfall: -{item.shortfall}
+                                      </span>
+                                    )}
                                     <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1">
                                       <Wrench className="w-3 h-3 text-slate-500" />
                                       <span>Labour: ₹{item.labour_charge}</span>

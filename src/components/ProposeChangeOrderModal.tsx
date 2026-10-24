@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Send,
+  Users,
 } from 'lucide-react';
 import { Booking } from '../types';
 import { api } from '../services/api';
@@ -28,6 +29,9 @@ export const ProposeChangeOrderModal: React.FC<ProposeChangeOrderModalProps> = (
   const [title, setTitle] = useState('');
   const [reason, setReason] = useState('');
   const [additionalAmount, setAdditionalAmount] = useState('250');
+  const [adjustCrew, setAdjustCrew] = useState<boolean>(false);
+  const [crewDelta, setCrewDelta] = useState<number>(1);
+  const [durationDelta, setDurationDelta] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -43,6 +47,9 @@ export const ProposeChangeOrderModal: React.FC<ProposeChangeOrderModalProps> = (
       setTitle('');
       setReason('');
       setAdditionalAmount('250');
+      setAdjustCrew(false);
+      setCrewDelta(1);
+      setDurationDelta(1);
     } else {
       if (dialog.open) {
         dialog.close();
@@ -96,7 +103,20 @@ export const ProposeChangeOrderModal: React.FC<ProposeChangeOrderModalProps> = (
         title: title.trim(),
         reason: reason.trim(),
         additionalAmount: parsedExtra,
+        crew_adjustment: adjustCrew
+          ? {
+              added_workers: crewDelta,
+              added_duration: durationDelta,
+              reason: reason.trim(),
+            }
+          : undefined,
       });
+
+      if (res.error) {
+        setIsSubmitting(false);
+        setErrorMsg(res.error);
+        return;
+      }
 
       setIsSubmitting(false);
       onClose();
@@ -181,6 +201,60 @@ export const ProposeChangeOrderModal: React.FC<ProposeChangeOrderModalProps> = (
               placeholder="Explain why this extra work was not visible in initial inspection..."
               className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 text-xs resize-none"
             />
+          </div>
+
+          {/* Crew Adjustment Option */}
+          <div className="p-3 bg-sky-50 rounded-xl border border-sky-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={adjustCrew}
+                  onChange={(e) => setAdjustCrew(e.target.checked)}
+                  className="rounded text-brand-600 focus:ring-brand-500"
+                />
+                <span className="font-bold text-sky-950 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-sky-700" />
+                  <span>Crew Adjustment (Headcount or Days)</span>
+                </span>
+              </label>
+              {booking.crew_size && (
+                <span className="text-[10px] text-slate-500">
+                  Current: {booking.crew_size} workers
+                </span>
+              )}
+            </div>
+
+            {adjustCrew && (
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-sky-100">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                    Added Workers (+/-)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={crewDelta}
+                    onChange={(e) => setCrewDelta(parseInt(e.target.value, 10) || 1)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                    Added Duration (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={durationDelta}
+                    onChange={(e) => setDurationDelta(parseInt(e.target.value, 10) || 1)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

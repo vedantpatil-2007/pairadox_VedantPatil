@@ -91,6 +91,13 @@ export const CounterofferModal: React.FC<CounterofferModalProps> = ({
         notes.trim() || `Proposed new rate of ₹${priceNum}`,
         byRole
       );
+
+      if (res.error) {
+        setIsSubmitting(false);
+        setErrorMsg(res.error);
+        return;
+      }
+
       setIsSubmitting(false);
       onClose();
       onCounterSubmitted(res.data);

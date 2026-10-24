@@ -13,6 +13,7 @@ import {
   Check,
   FileCheck2,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { Booking, RepairPassport } from '../types';
 
@@ -183,6 +184,19 @@ export const RepairPassportModal: React.FC<RepairPassportModalProps> = ({
                 </span>
                 <h4 className="text-sm font-bold text-slate-900">{booking.worker?.name || 'Technician'}</h4>
                 <p className="capitalize text-slate-500">{booking.worker?.trade} • Bengaluru</p>
+                {booking.crew_size && booking.crew_size > 1 && (
+                  <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                      <Users className="w-3 h-3 text-indigo-600" />
+                      <span>Team: {booking.crew_size} Techs</span>
+                    </span>
+                    {booking.supervisor_name && (
+                      <span className="text-[10px] text-slate-600">
+                        Lead: <strong>{booking.supervisor_name}</strong>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -231,7 +245,14 @@ export const RepairPassportModal: React.FC<RepairPassportModalProps> = ({
                     className="flex justify-between items-center text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100"
                   >
                     <div>
-                      <span className="font-medium">+ {co.title}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium">+ {co.title}</span>
+                        {co.crew_adjustment && (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded">
+                            +{co.crew_adjustment.added_workers} crew
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] text-emerald-600 block italic">
                         Approved: {co.reason}
                       </span>

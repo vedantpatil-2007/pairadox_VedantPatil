@@ -22,9 +22,9 @@ describe('SkillNear Responsive Layout Verification', () => {
     const brandElements = screen.getAllByText(/Skill/i);
     expect(brandElements.length).toBeGreaterThanOrEqual(1);
 
-    // Responsive disclaimer banner
-    const protoBanner = screen.getAllByText(/Hackathon Prototype/i);
-    expect(protoBanner.length).toBeGreaterThanOrEqual(1);
+    // Responsive preview banner
+    const previewBanner = screen.getAllByText(/SkillNear Preview/i);
+    expect(previewBanner.length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders correctly on Tablet viewport (768x1024)', async () => {
@@ -39,7 +39,7 @@ describe('SkillNear Responsive Layout Verification', () => {
     // Verification of layout elements
     const brandElements = screen.getAllByText(/Skill/i);
     expect(brandElements.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/PS03 Hyperlocal/i)).toBeInTheDocument();
+    expect(screen.getByText(/On-Demand Blue-Collar Technicians Near You/i)).toBeInTheDocument();
   });
 
   it('renders correctly on Desktop / Laptop viewport (1440x900)', async () => {
@@ -52,6 +52,6 @@ describe('SkillNear Responsive Layout Verification', () => {
     });
 
     // Full desktop navbar and subtitle
-    expect(screen.getByText(/On-Demand Blue-Collar Services Platform/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Local services\. Clear agreements\. Fair pricing\./i).length).toBeGreaterThanOrEqual(1);
   });
 });

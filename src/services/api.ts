@@ -1,4 +1,12 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import {
+  supabase,
+  isSupabaseConfigured,
+  verifySupabaseHealth,
+  authService,
+  AuthUser,
+  SupabaseHealthStatus,
+} from '../lib/supabase';
+import { demoRepo } from './demoRepository';
 import {
   Worker,
   Service,
@@ -12,26 +20,10 @@ import {
   ChangeOrder,
   RepairPassport,
 } from '../types';
-import {
-  INITIAL_DEMO_WORKERS,
-  INITIAL_DEMO_SERVICES,
-  INITIAL_DEMO_REQUESTS,
-  INITIAL_DEMO_QUOTES,
-  INITIAL_DEMO_BOOKINGS,
-  INITIAL_DEMO_REVIEWS,
-} from '../data/mockSeedData';
-
-// Local reactive fallback state for simulation when Supabase is not configured
-const localState = {
-  workers: [...INITIAL_DEMO_WORKERS],
-  services: [...INITIAL_DEMO_SERVICES],
-  requests: [...INITIAL_DEMO_REQUESTS],
-  quotes: [...INITIAL_DEMO_QUOTES],
-  bookings: [...INITIAL_DEMO_BOOKINGS],
-  reviews: [...INITIAL_DEMO_REVIEWS],
-};
 
 async function getActiveAuthUid(): Promise<string | null> {
+  const currentUser = await authService.getCurrentUser();
+  if (currentUser) return currentUser.id;
   if (!supabase) return null;
   try {
     const { data } = await supabase.auth.getSession();
@@ -84,59 +76,84 @@ export function maskLeadForPublicFeed(
       'Hyperlocal Vicinity (Exact address provided upon confirmed booking)',
     customer_lat: Math.round(req.customer_lat * 100) / 100,
     customer_lng: Math.round(req.customer_lng * 100) / 100,
+    organization_name: req.organization_name || (req as any).organizationName,
   };
 }
 
 export interface ApiResponse<T> {
   data: T;
   isLiveDatabase: boolean;
+  isDemoSimulation?: boolean;
   error?: string;
 }
 
+export interface SubmitQuotePayload {
+  request_id?: string;
+  requestId?: string;
+  worker_id?: string;
+  workerId?: string;
+  amount: number;
+  estimated_duration?: string;
+  estimatedDuration?: string;
+  notes?: string;
+  itemization?: QuoteItemization;
+}
+
 export const api = {
+  /**
+   * Reset local demo repository back to clean seed fixtures
+   */
+  resetDemoData(): void {
+    demoRepo.reset();
+  },
+
+  /**
+   * Check 3-tier health status
+   */
+  async getHealthStatus(): Promise<SupabaseHealthStatus> {
+    return verifySupabaseHealth();
+  },
+
+  /**
+   * Current user management
+   */
+  async getCurrentUser(): Promise<AuthUser | null> {
+    return authService.getCurrentUser();
+  },
+  async signIn(email: string, password: string) {
+    return authService.signInWithEmail(email, password);
+  },
+  async signUp(email: string, password: string, name?: string, role: 'customer' | 'worker' = 'customer') {
+    return authService.signUpWithEmail(email, password, name, role);
+  },
+  async signOut() {
+    return authService.signOut();
+  },
+  setDemoUser(user: AuthUser | null) {
+    authService.setDemoUser(user);
+  },
+
   /**
    * Fetch workers, optionally filtered by trade
    */
   async getWorkers(trade?: Trade | 'all'): Promise<ApiResponse<Worker[]>> {
     if (isSupabaseConfigured() && supabase) {
       try {
-        // Query privacy-preserving workers_directory view (omits worker phone, email, and exact street)
         let query = supabase.from('workers_directory').select('*').order('rating', { ascending: false });
         if (trade && trade !== 'all') {
           query = query.eq('trade', trade);
         }
         const { data, error } = await query;
-        if (error) throw error;
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           return { data: data as Worker[], isLiveDatabase: true };
         }
-        // If table exists in Supabase but has not been populated with demo seed records yet,
-        // provide the demo seed workers so the application and test suites function properly.
-        const filtered =
-          !trade || trade === 'all'
-            ? localState.workers
-            : localState.workers.filter((w) => w.trade === trade);
-        return { data: filtered, isLiveDatabase: false };
-      } catch (err: unknown) {
-        console.warn('Supabase fetch workers failed, using local simulation state:', err);
-        const filtered =
-          !trade || trade === 'all'
-            ? localState.workers
-            : localState.workers.filter((w) => w.trade === trade);
-        return {
-          data: filtered,
-          isLiveDatabase: false,
-          error: (err as Error)?.message || 'Database query failed',
-        };
+      } catch (err) {
+        console.warn('Supabase fetch workers failed, reading from demo repository:', err);
       }
     }
 
-    // Local fallback when not configured
-    const filtered =
-      !trade || trade === 'all'
-        ? localState.workers
-        : localState.workers.filter((w) => w.trade === trade);
-    return { data: filtered, isLiveDatabase: false };
+    const workers = demoRepo.getWorkers(trade);
+    return { data: workers, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -150,14 +167,15 @@ export const api = {
           .select('*')
           .eq('id', workerId)
           .single();
-        if (error) throw error;
-        return { data: data as Worker, isLiveDatabase: true };
+        if (!error && data) {
+          return { data: data as Worker, isLiveDatabase: true };
+        }
       } catch (err) {
-        console.warn('Supabase getWorkerById failed, using local state:', err);
+        console.warn('Supabase getWorkerById failed, reading from demo repository:', err);
       }
     }
-    const found = localState.workers.find((w) => w.id === workerId) || null;
-    return { data: found, isLiveDatabase: false };
+    const found = demoRepo.getWorkerById(workerId);
+    return { data: found, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -171,51 +189,44 @@ export const api = {
           query = query.eq('worker_id', workerId);
         }
         const { data, error } = await query;
-        if (error) throw error;
-        if (data) {
+        if (!error && data && data.length > 0) {
           return { data: data as Service[], isLiveDatabase: true };
         }
       } catch (err) {
-        console.warn('Supabase fetch services failed, using local fallback:', err);
+        console.warn('Supabase fetch services failed, reading from demo repository:', err);
       }
     }
 
-    const filtered = workerId
-      ? localState.services.filter((s) => s.worker_id === workerId)
-      : localState.services;
-    return { data: filtered, isLiveDatabase: false };
+    const services = demoRepo.getServices(workerId);
+    return { data: services, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
-   * Create a new Service Request
+   * Create a new Service Request.
+   * If running in verified live database mode: explicitly awaits write and reads back record.
+   * If running in simulation mode: writes to local storage-backed demo repository (survives refresh).
    */
   async createServiceRequest(
     payload: Omit<ServiceRequest, 'id' | 'created_at' | 'updated_at' | 'status'>
   ): Promise<ApiResponse<ServiceRequest>> {
     const uid = await getActiveAuthUid();
-    const newRequest: ServiceRequest = {
-      ...payload,
-      id: crypto.randomUUID ? crypto.randomUUID() : `sr-${Date.now()}`,
-      customer_id: uid,
-      status: 'open',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    const health = await verifySupabaseHealth();
 
-    if (isSupabaseConfigured() && supabase) {
+    // If live operations are fully verified, write to remote Supabase and verify read-back
+    if (health.operationsVerified && supabase) {
       try {
         const insertPayload: Record<string, unknown> = {
-          customer_name: newRequest.customer_name,
-          customer_phone: newRequest.customer_phone,
-          customer_address: newRequest.customer_address,
-          customer_lat: newRequest.customer_lat,
-          customer_lng: newRequest.customer_lng,
-          category: newRequest.category,
-          title: newRequest.title,
-          description: newRequest.description,
-          urgency: newRequest.urgency,
-          budget: newRequest.budget,
-          preferred_worker_id: newRequest.preferred_worker_id || null,
+          customer_name: payload.customer_name,
+          customer_phone: payload.customer_phone,
+          customer_address: payload.customer_address,
+          customer_lat: payload.customer_lat,
+          customer_lng: payload.customer_lng,
+          category: payload.category,
+          title: payload.title,
+          description: payload.description,
+          urgency: payload.urgency,
+          budget: payload.budget,
+          preferred_worker_id: payload.preferred_worker_id || null,
           status: 'open',
         };
         if (uid) insertPayload.customer_id = uid;
@@ -227,20 +238,60 @@ export const api = {
           .single();
 
         if (error) throw error;
-        return { data: data as ServiceRequest, isLiveDatabase: true };
+
+        // Read-back verification before reporting success
+        const { data: readBack, error: readBackErr } = await supabase
+          .from('service_requests')
+          .select('*')
+          .eq('id', (data as ServiceRequest).id)
+          .single();
+
+        if (readBackErr || !readBack) {
+          throw new Error('Write verification failed: Created record could not be read back from database.');
+        }
+
+        return { data: readBack as ServiceRequest, isLiveDatabase: true };
       } catch (err: unknown) {
-        console.error('Supabase createServiceRequest error:', err);
-        localState.requests.unshift(newRequest);
+        console.error('Supabase live createServiceRequest error:', err);
         return {
-          data: newRequest,
-          isLiveDatabase: false,
-          error: (err as Error).message || 'Failed to save to Supabase. Stored in local preview only.',
+          data: null as unknown as ServiceRequest,
+          isLiveDatabase: true,
+          error: (err as Error).message || 'Failed to save request to database.',
         };
       }
     }
 
-    localState.requests.unshift(newRequest);
-    return { data: newRequest, isLiveDatabase: false };
+    const customerName = payload.customer_name || (payload as any).customerName || 'Verified Customer';
+    const customerPhone = payload.customer_phone || (payload as any).customerPhone || null;
+    const customerAddress = payload.customer_address || (payload as any).customerAddress || 'Indiranagar, Bengaluru';
+    const customerLat = payload.customer_lat ?? (payload as any).customerLat ?? 12.9784;
+    const customerLng = payload.customer_lng ?? (payload as any).customerLng ?? 77.6408;
+    const crewSize = payload.crew_size ?? (payload as any).crewSize ?? 1;
+    const organizationName = payload.organization_name || (payload as any).organizationName || undefined;
+    const durationValue = payload.duration_value ?? (payload as any).durationValue ?? undefined;
+    const durationUnit = payload.duration_unit || (payload as any).durationUnit || undefined;
+
+    // Simulation Mode: Save to persistent demo repository (survives page refresh)
+    const newRequest: ServiceRequest = {
+      ...payload,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_address: customerAddress,
+      customer_lat: customerLat,
+      customer_lng: customerLng,
+      crew_size: crewSize,
+      organization_name: organizationName,
+      duration_value: durationValue,
+      duration_unit: durationUnit,
+      id: crypto.randomUUID ? crypto.randomUUID() : `sr-${Date.now()}`,
+      customer_id: uid,
+      status: 'open',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const saved = demoRepo.addRequest(newRequest);
+    return { data: saved, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -250,7 +301,9 @@ export const api = {
    */
   async getJobLeads(category?: Trade | 'all'): Promise<ApiResponse<ServiceRequest[]>> {
     const uid = await getActiveAuthUid();
-    if (isSupabaseConfigured() && supabase) {
+    const health = await verifySupabaseHealth();
+
+    if (health.operationsVerified && supabase) {
       try {
         let query = supabase.from('job_leads').select('*').order('created_at', { ascending: false });
         if (category && category !== 'all') {
@@ -261,21 +314,18 @@ export const api = {
           return { data: data as ServiceRequest[], isLiveDatabase: true };
         }
       } catch (err) {
-        console.warn('Supabase getJobLeads view query failed, using fallback:', err);
+        console.warn('Supabase getJobLeads view query failed, using demo repository:', err);
       }
     }
 
-    // Local fallback: apply strict privacy masking to all eligible open/quoted leads
-    const eligible = localState.requests.filter(
+    // Local fallback: read from demo repository and apply strict privacy masking
+    const allRequests = demoRepo.getRequests(category);
+    const eligible = allRequests.filter(
       (r) => r.status === 'open' || r.status === 'quoted' || (uid && r.customer_id === uid)
     );
-    const filtered =
-      !category || category === 'all'
-        ? eligible
-        : eligible.filter((r) => r.category === category);
 
-    const masked = filtered.map((r) => maskLeadForPublicFeed(r, uid));
-    return { data: masked, isLiveDatabase: false };
+    const masked = eligible.map((r) => maskLeadForPublicFeed(r, uid));
+    return { data: masked, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -283,54 +333,35 @@ export const api = {
    */
   async getServiceRequests(category?: Trade | 'all'): Promise<ApiResponse<ServiceRequest[]>> {
     const uid = await getActiveAuthUid();
-    if (isSupabaseConfigured() && supabase) {
+    const health = await verifySupabaseHealth();
+
+    if (health.operationsVerified && supabase) {
       try {
-        // 1. Try querying the privacy-preserving job_leads view first
         let query = supabase.from('job_leads').select('*').order('created_at', { ascending: false });
         if (category && category !== 'all') {
           query = query.eq('category', category);
         }
         const { data: viewData, error: viewError } = await query;
         if (!viewError && viewData && viewData.length > 0) {
-          // If localState has newly posted requests that fell back to local preview, merge them
-          const unsaved = localState.requests.filter(
-            (localReq) => !viewData.some((dbReq) => dbReq.id === localReq.id)
-          );
-          const combined = [
-            ...unsaved.map((r) => maskLeadForPublicFeed(r, uid)),
-            ...(viewData as ServiceRequest[]),
-          ];
-          return { data: combined, isLiveDatabase: true };
-        }
-
-        // 2. Fallback to direct service_requests table if view is not migrated yet
-        let fallbackQuery = supabase.from('service_requests').select('*').order('created_at', { ascending: false });
-        if (category && category !== 'all') {
-          fallbackQuery = fallbackQuery.eq('category', category);
-        }
-        const { data, error } = await fallbackQuery;
-        if (!error && data && data.length > 0) {
-          return { data: data as ServiceRequest[], isLiveDatabase: true };
+          return { data: viewData as ServiceRequest[], isLiveDatabase: true };
         }
       } catch (err) {
-        console.warn('Supabase getServiceRequests failed, using local state:', err);
+        console.warn('Supabase getServiceRequests failed, reading from demo repository:', err);
       }
     }
 
-    const filtered =
-      !category || category === 'all'
-        ? localState.requests
-        : localState.requests.filter((r) => r.category === category);
-
-    const masked = filtered.map((r) => maskLeadForPublicFeed(r, uid));
-    return { data: masked, isLiveDatabase: false };
+    const allRequests = demoRepo.getRequests(category);
+    const masked = allRequests.map((r) => maskLeadForPublicFeed(r, uid));
+    return { data: masked, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
    * Get quotes for a specific request or worker
    */
   async getQuotes(filter?: { requestId?: string; workerId?: string }): Promise<ApiResponse<Quote[]>> {
-    if (isSupabaseConfigured() && supabase) {
+    const health = await verifySupabaseHealth();
+
+    if (health.operationsVerified && supabase) {
       try {
         let query = supabase
           .from('quotes')
@@ -345,38 +376,26 @@ export const api = {
         }
 
         const { data, error } = await query;
-        if (error) throw error;
-        if (data && data.length > 0) {
-          const unsaved = localState.quotes.filter(
-            (localQ) => !data.some((dbQ) => dbQ.id === localQ.id)
-          );
-          const combined = [...unsaved, ...(data as Quote[])];
-          let filtered = combined;
-          if (filter?.requestId) filtered = filtered.filter((q) => q.request_id === filter.requestId);
-          if (filter?.workerId) filtered = filtered.filter((q) => q.worker_id === filter.workerId);
-          return { data: filtered, isLiveDatabase: true };
+        if (!error && data && data.length > 0) {
+          return { data: data as Quote[], isLiveDatabase: true };
         }
       } catch (err) {
-        console.warn('Supabase getQuotes failed, using local state:', err);
+        console.warn('Supabase getQuotes failed, using demo repository:', err);
       }
     }
 
-    let result = [...localState.quotes];
-    if (filter?.requestId) {
-      result = result.filter((q) => q.request_id === filter.requestId);
-    }
-    if (filter?.workerId) {
-      result = result.filter((q) => q.worker_id === filter.workerId);
-    }
+    const quotes = demoRepo.getQuotes(filter);
+    const workers = demoRepo.getWorkers();
+    const requests = demoRepo.getRequests();
 
-    // Populate joined relations in local fallback
-    const enriched = result.map((q) => ({
+    // Populate joined relations
+    const enriched = quotes.map((q) => ({
       ...q,
-      worker: localState.workers.find((w) => w.id === q.worker_id),
-      request: localState.requests.find((r) => r.id === q.request_id),
+      worker: workers.find((w) => w.id === q.worker_id),
+      request: requests.find((r) => r.id === q.request_id),
     }));
 
-    return { data: enriched, isLiveDatabase: false };
+    return { data: enriched, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -414,24 +433,8 @@ export const api = {
       }
     }
 
-    const newQuote: Quote = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `qt-${Date.now()}`,
-      request_id: requestId,
-      worker_id: workerId,
-      creator_id: uid,
-      amount: computedAmount,
-      estimated_duration: estimatedDuration,
-      notes: payload.notes || '',
-      status: 'pending',
-      counter_amount: null,
-      counter_notes: null,
-      last_updated_by: 'worker',
-      itemization: payload.itemization,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    if (isSupabaseConfigured() && supabase) {
+    const health = await verifySupabaseHealth();
+    if (health.operationsVerified && supabase) {
       try {
         const quoteInsert: Record<string, unknown> = {
           request_id: requestId,
@@ -461,41 +464,49 @@ export const api = {
 
         return { data: data as Quote, isLiveDatabase: true };
       } catch (err: unknown) {
-        console.error('Supabase submitQuote error:', err);
-        localState.quotes.unshift(newQuote);
-        const req = localState.requests.find((r) => r.id === requestId);
-        if (req && req.status === 'open') {
-          req.status = 'quoted';
-          req.updated_at = new Date().toISOString();
-        }
+        console.error('Supabase live submitQuote error:', err);
         return {
-          data: {
-            ...newQuote,
-            worker: localState.workers.find((w) => w.id === newQuote.worker_id),
-            request: localState.requests.find((r) => r.id === newQuote.request_id),
-          },
-          isLiveDatabase: false,
-          error: (err as Error).message || 'Failed to submit quote to Supabase.',
+          data: null as unknown as Quote,
+          isLiveDatabase: true,
+          error: (err as Error).message || 'Failed to submit quote to database.',
         };
       }
     }
 
-    localState.quotes.unshift(newQuote);
-    // Update local request status
-    const req = localState.requests.find((r) => r.id === requestId);
-    if (req && req.status === 'open') {
-      req.status = 'quoted';
-      req.updated_at = new Date().toISOString();
-    }
+    // Simulation mode: Save in demo repository
+    const newQuote: Quote = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `qt-${Date.now()}`,
+      request_id: requestId,
+      worker_id: workerId,
+      creator_id: uid,
+      amount: computedAmount,
+      estimated_duration: estimatedDuration,
+      notes: payload.notes || '',
+      status: 'pending',
+      counter_amount: null,
+      counter_notes: null,
+      last_updated_by: 'worker',
+      itemization: payload.itemization,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const saved = demoRepo.addQuote(newQuote);
+    const worker = demoRepo.getWorkerById(workerId);
+    const request = demoRepo.getRequests().find((r) => r.id === requestId);
 
     return {
-      data: {
-        ...newQuote,
-        worker: localState.workers.find((w) => w.id === newQuote.worker_id),
-        request: localState.requests.find((r) => r.id === newQuote.request_id),
-      },
+      data: { ...saved, worker: worker || undefined, request },
       isLiveDatabase: false,
+      isDemoSimulation: true,
     };
+  },
+
+  /**
+   * Alias for submitQuote
+   */
+  async createQuote(payload: SubmitQuotePayload): Promise<ApiResponse<Quote>> {
+    return this.submitQuote(payload);
   },
 
   /**
@@ -508,8 +519,9 @@ export const api = {
     by: 'customer' | 'worker'
   ): Promise<ApiResponse<Quote>> {
     const updatedAt = new Date().toISOString();
+    const health = await verifySupabaseHealth();
 
-    if (isSupabaseConfigured() && supabase) {
+    if (health.operationsVerified && supabase) {
       try {
         const { data, error } = await supabase
           .from('quotes')
@@ -527,25 +539,29 @@ export const api = {
         if (error) throw error;
         return { data: data as Quote, isLiveDatabase: true };
       } catch (err) {
-        console.error('Supabase submitCounteroffer error:', err);
+        return {
+          data: null as unknown as Quote,
+          isLiveDatabase: true,
+          error: (err as Error).message || 'Failed to submit counteroffer to database.',
+        };
       }
     }
 
-    // Local fallback
-    const quote = localState.quotes.find((q) => q.id === quoteId);
-    if (quote) {
-      quote.counter_amount = counterAmount;
-      quote.counter_notes = counterNotes;
-      quote.status = 'countered';
-      quote.last_updated_by = by;
-      quote.updated_at = updatedAt;
+    // Simulation Mode
+    const updated = demoRepo.updateQuote(quoteId, {
+      counter_amount: counterAmount,
+      counter_notes: counterNotes,
+      status: 'countered',
+      last_updated_by: by,
+    });
+
+    if (updated) {
+      const worker = demoRepo.getWorkerById(updated.worker_id);
+      const request = demoRepo.getRequests().find((r) => r.id === updated.request_id);
       return {
-        data: {
-          ...quote,
-          worker: localState.workers.find((w) => w.id === quote.worker_id),
-          request: localState.requests.find((r) => r.id === quote.request_id),
-        },
+        data: { ...updated, worker: worker || undefined, request },
         isLiveDatabase: false,
+        isDemoSimulation: true,
       };
     }
 
@@ -564,13 +580,16 @@ export const api = {
     serviceAddress: string;
     agreedPrice: number;
     scheduledFor?: string;
+    crewSize?: number;
+    organizationName?: string;
+    supervisorName?: string;
   }): Promise<ApiResponse<Booking>> {
     const now = new Date().toISOString();
     const scheduledTime = payload.scheduledFor || new Date(Date.now() + 2 * 3600000).toISOString();
     const uid = await getActiveAuthUid();
+    const health = await verifySupabaseHealth();
 
-    // Look up the underlying request to resolve customer details if placeholders were passed
-    const targetReq = localState.requests.find((r) => r.id === payload.requestId);
+    const targetReq = demoRepo.getRequests().find((r) => r.id === payload.requestId);
     const resolvedName =
       payload.customerName && payload.customerName !== 'Customer'
         ? payload.customerName
@@ -589,33 +608,15 @@ export const api = {
         ? payload.serviceAddress
         : targetReq?.customer_address || 'Koramangala, Bengaluru';
 
-    const newBooking: Booking = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `bk-${Date.now()}`,
-      request_id: payload.requestId,
-      worker_id: payload.workerId,
-      quote_id: payload.quoteId,
-      customer_id: uid || targetReq?.customer_id || null,
-      customer_name: resolvedName,
-      customer_phone: resolvedPhone,
-      service_address: resolvedAddress,
-      agreed_price: payload.agreedPrice,
-      original_agreed_price: payload.agreedPrice,
-      change_orders: [],
-      scheduled_for: scheduledTime,
-      status: 'confirmed',
-      created_at: now,
-      completed_at: null,
-    };
-
-    if (isSupabaseConfigured() && supabase) {
+    if (health.operationsVerified && supabase) {
       try {
-        // 1. Mark quote as accepted by customer before confirming booking
+        // 1. Mark quote as accepted
         await supabase
           .from('quotes')
           .update({ status: 'accepted', updated_at: now })
           .eq('id', payload.quoteId);
 
-        // 2. Insert booking (enforces quote is accepted)
+        // 2. Insert booking
         const bookingInsert: Record<string, unknown> = {
           request_id: payload.requestId,
           worker_id: payload.workerId,
@@ -653,54 +654,45 @@ export const api = {
 
         return { data: resBooking, isLiveDatabase: true };
       } catch (err: unknown) {
-        console.error('Supabase confirmBooking error:', err);
-        localState.bookings.unshift(newBooking);
-        const quote = localState.quotes.find((q) => q.id === payload.quoteId);
-        if (quote) {
-          quote.status = 'accepted';
-          quote.updated_at = now;
-        }
-        const req = localState.requests.find((r) => r.id === payload.requestId);
-        if (req) {
-          req.status = 'booked';
-          req.updated_at = now;
-        }
+        console.error('Supabase live confirmBooking error:', err);
         return {
-          data: {
-            ...newBooking,
-            worker: localState.workers.find((w) => w.id === newBooking.worker_id),
-            request: localState.requests.find((r) => r.id === newBooking.request_id),
-          },
-          isLiveDatabase: false,
+          data: null as unknown as Booking,
+          isLiveDatabase: true,
           error: (err as Error).message || 'Failed to persist booking in Supabase.',
         };
       }
     }
 
-    // Local fallback
-    localState.bookings.unshift(newBooking);
+    // Simulation Mode: Save to persistent demo repository
+    const newBooking: Booking = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `bk-${Date.now()}`,
+      request_id: payload.requestId,
+      worker_id: payload.workerId,
+      quote_id: payload.quoteId,
+      customer_id: uid || targetReq?.customer_id || null,
+      customer_name: resolvedName,
+      customer_phone: resolvedPhone,
+      service_address: resolvedAddress,
+      agreed_price: payload.agreedPrice,
+      original_agreed_price: payload.agreedPrice,
+      crew_size: payload.crewSize || targetReq?.crew_size || 1,
+      organization_name: payload.organizationName || targetReq?.organization_name,
+      supervisor_name: payload.supervisorName,
+      change_orders: [],
+      scheduled_for: scheduledTime,
+      status: 'confirmed',
+      created_at: now,
+      completed_at: null,
+    };
 
-    // Update quote status
-    const quote = localState.quotes.find((q) => q.id === payload.quoteId);
-    if (quote) {
-      quote.status = 'accepted';
-      quote.updated_at = now;
-    }
-
-    // Update request status
-    const req = localState.requests.find((r) => r.id === payload.requestId);
-    if (req) {
-      req.status = 'booked';
-      req.updated_at = now;
-    }
+    const saved = demoRepo.addBooking(newBooking);
+    const worker = demoRepo.getWorkerById(payload.workerId);
+    const request = demoRepo.getRequests().find((r) => r.id === payload.requestId);
 
     return {
-      data: {
-        ...newBooking,
-        worker: localState.workers.find((w) => w.id === newBooking.worker_id),
-        request: localState.requests.find((r) => r.id === newBooking.request_id),
-      },
+      data: { ...saved, worker: worker || undefined, request },
       isLiveDatabase: false,
+      isDemoSimulation: true,
     };
   },
 
@@ -708,7 +700,9 @@ export const api = {
    * Get bookings
    */
   async getBookings(filter?: { workerId?: string; customerPhone?: string }): Promise<ApiResponse<Booking[]>> {
-    if (isSupabaseConfigured() && supabase) {
+    const health = await verifySupabaseHealth();
+
+    if (health.operationsVerified && supabase) {
       try {
         let query = supabase
           .from('bookings')
@@ -720,33 +714,25 @@ export const api = {
         }
 
         const { data, error } = await query;
-        if (error) throw error;
-        if (data && data.length > 0) {
-          const unsaved = localState.bookings.filter(
-            (localB) => !data.some((dbB) => dbB.id === localB.id)
-          );
-          const combined = [...unsaved, ...(data as Booking[])];
-          let filtered = combined;
-          if (filter?.workerId) filtered = filtered.filter((b) => b.worker_id === filter.workerId);
-          return { data: filtered, isLiveDatabase: true };
+        if (!error && data && data.length > 0) {
+          return { data: data as Booking[], isLiveDatabase: true };
         }
       } catch (err) {
-        console.warn('Supabase getBookings failed, using local state:', err);
+        console.warn('Supabase getBookings failed, reading from demo repository:', err);
       }
     }
 
-    let list = [...localState.bookings];
-    if (filter?.workerId) {
-      list = list.filter((b) => b.worker_id === filter.workerId);
-    }
+    const list = demoRepo.getBookings(filter?.workerId);
+    const workers = demoRepo.getWorkers();
+    const requests = demoRepo.getRequests();
 
     const enriched = list.map((b) => ({
       ...b,
-      worker: localState.workers.find((w) => w.id === b.worker_id),
-      request: localState.requests.find((r) => r.id === b.request_id),
+      worker: workers.find((w) => w.id === b.worker_id),
+      request: requests.find((r) => r.id === b.request_id),
     }));
 
-    return { data: enriched, isLiveDatabase: false };
+    return { data: enriched, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -758,8 +744,9 @@ export const api = {
     completionNotes?: string
   ): Promise<ApiResponse<Booking>> {
     const completedAt = status === 'completed' ? new Date().toISOString() : null;
+    const health = await verifySupabaseHealth();
 
-    if (isSupabaseConfigured() && supabase) {
+    if (health.operationsVerified && supabase) {
       try {
         const updateData: Record<string, unknown> = { status };
         if (completedAt) updateData.completed_at = completedAt;
@@ -774,7 +761,6 @@ export const api = {
 
         if (error) throw error;
 
-        // If completed, update request status to completed
         if (status === 'completed' && data?.request_id) {
           await supabase
             .from('service_requests')
@@ -784,36 +770,38 @@ export const api = {
 
         return { data: data as Booking, isLiveDatabase: true };
       } catch (err) {
-        console.error('Supabase updateBookingStatus error:', err);
+        return {
+          data: null as unknown as Booking,
+          isLiveDatabase: true,
+          error: (err as Error).message || 'Failed to update booking status in Supabase.',
+        };
       }
     }
 
-    // Local fallback
-    const bk = localState.bookings.find((b) => b.id === bookingId);
-    if (!bk) throw new Error('Booking not found');
+    // Simulation mode
+    const updated = demoRepo.updateBooking(bookingId, {
+      status,
+      completed_at: completedAt,
+      completion_notes: completionNotes,
+    });
 
-    bk.status = status;
-    if (completedAt) bk.completed_at = completedAt;
-    if (completionNotes) bk.completion_notes = completionNotes;
+    if (!updated) throw new Error('Booking not found');
 
-    const req = localState.requests.find((r) => r.id === bk.request_id);
-    if (req && status === 'completed') {
-      req.status = 'completed';
-      req.updated_at = new Date().toISOString();
-    }
+    const worker = demoRepo.getWorkerById(updated.worker_id);
+    const request = demoRepo.getRequests().find((r) => r.id === updated.request_id);
 
     return {
-      data: {
-        ...bk,
-        worker: localState.workers.find((w) => w.id === bk.worker_id),
-        request: localState.requests.find((r) => r.id === bk.request_id),
-      },
+      data: { ...updated, worker: worker || undefined, request },
       isLiveDatabase: false,
+      isDemoSimulation: true,
     };
   },
 
   /**
-   * Submit customer review
+   * Submit customer review.
+   * Separates historical seed ratings from real/simulated customer reviews.
+   * Calculates displayed rating and review count mathematically:
+   * (baseRating * baseCount + sum(newReviews)) / (baseCount + newCount)
    */
   async submitReview(payload: {
     bookingId: string;
@@ -823,18 +811,9 @@ export const api = {
     comment: string;
   }): Promise<ApiResponse<Review>> {
     const uid = await getActiveAuthUid();
-    const newReview: Review = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `rev-${Date.now()}`,
-      booking_id: payload.bookingId,
-      worker_id: payload.workerId,
-      customer_id: uid,
-      customer_name: payload.customerName,
-      rating: payload.rating,
-      comment: payload.comment,
-      created_at: new Date().toISOString(),
-    };
+    const health = await verifySupabaseHealth();
 
-    if (isSupabaseConfigured() && supabase) {
+    if (health.operationsVerified && supabase) {
       try {
         const reviewInsert: Record<string, unknown> = {
           booking_id: payload.bookingId,
@@ -854,56 +833,53 @@ export const api = {
         if (error) throw error;
         return { data: data as Review, isLiveDatabase: true };
       } catch (err) {
-        console.error('Supabase submitReview error:', err);
+        return {
+          data: null as unknown as Review,
+          isLiveDatabase: true,
+          error: (err as Error).message || 'Failed to submit review to Supabase.',
+        };
       }
     }
 
-    // Local fallback
-    localState.reviews.unshift(newReview);
+    // Simulation Mode: Save to demo repository with baseline preservation
+    const newReview: Review = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `rev-${Date.now()}`,
+      booking_id: payload.bookingId,
+      worker_id: payload.workerId,
+      customer_id: uid,
+      customer_name: payload.customerName,
+      rating: payload.rating,
+      comment: payload.comment,
+      created_at: new Date().toISOString(),
+    };
 
-    // Update worker average rating and count in local state
-    const worker = localState.workers.find((w) => w.id === payload.workerId);
-    if (worker) {
-      const allWorkerReviews = localState.reviews.filter((r) => r.worker_id === payload.workerId);
-      const sum = allWorkerReviews.reduce((acc, curr) => acc + curr.rating, 0);
-      worker.rating = Math.round((sum / allWorkerReviews.length) * 10) / 10;
-      worker.review_count = allWorkerReviews.length;
-    }
-
-    return { data: newReview, isLiveDatabase: false };
+    const { review } = demoRepo.addReview(newReview);
+    return { data: review, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
    * Get reviews for a worker
    */
   async getReviews(workerId?: string): Promise<ApiResponse<Review[]>> {
-    if (isSupabaseConfigured() && supabase) {
+    const health = await verifySupabaseHealth();
+
+    if (health.operationsVerified && supabase) {
       try {
-        // Query privacy-preserving public_reviews view (anonymizes customer_name, omits customer_id)
         let query = supabase.from('public_reviews').select('*').order('created_at', { ascending: false });
         if (workerId) {
           query = query.eq('worker_id', workerId);
         }
         const { data, error } = await query;
-        if (error) throw error;
-        if (data && data.length > 0) {
-          const unsaved = localState.reviews.filter(
-            (localR) => !data.some((dbR) => dbR.id === localR.id)
-          );
-          const combined = [...unsaved, ...(data as Review[])];
-          let filtered = combined;
-          if (workerId) filtered = filtered.filter((r) => r.worker_id === workerId);
-          return { data: filtered, isLiveDatabase: true };
+        if (!error && data && data.length > 0) {
+          return { data: data as Review[], isLiveDatabase: true };
         }
       } catch (err) {
-        console.warn('Supabase getReviews failed, using local state:', err);
+        console.warn('Supabase getReviews failed, using demo repository:', err);
       }
     }
 
-    const filtered = workerId
-      ? localState.reviews.filter((r) => r.worker_id === workerId)
-      : localState.reviews;
-    return { data: [...filtered], isLiveDatabase: false };
+    const reviews = demoRepo.getReviews(workerId);
+    return { data: reviews, isLiveDatabase: false, isDemoSimulation: true };
   },
 
   /**
@@ -916,9 +892,14 @@ export const api = {
       reason: string;
       additionalAmount?: number;
       additional_amount?: number;
+      crew_adjustment?: {
+        added_workers: number;
+        added_duration?: number;
+        reason: string;
+      };
     }
   ): Promise<ApiResponse<Booking>> {
-    const bk = localState.bookings.find((b) => b.id === bookingId);
+    const bk = demoRepo.getBookings().find((b) => b.id === bookingId);
     if (!bk) throw new Error('Booking not found');
 
     const additional = Number(
@@ -934,22 +915,24 @@ export const api = {
       additional_amount: additional,
       revised_total: bk.agreed_price + additional,
       status: 'pending_customer_approval',
+      crew_adjustment: payload.crew_adjustment,
       created_at: new Date().toISOString(),
     };
 
-    if (!bk.change_orders) bk.change_orders = [];
-    bk.change_orders.push(newChangeOrder);
-    if (!bk.original_agreed_price) {
-      bk.original_agreed_price = bk.agreed_price;
-    }
+    const updated = demoRepo.addChangeOrder(bookingId, newChangeOrder);
+    if (!updated) throw new Error('Failed to record change order');
+
+    const worker = demoRepo.getWorkerById(updated.worker_id);
+    const request = demoRepo.getRequests().find((r) => r.id === updated.request_id);
 
     return {
       data: {
-        ...bk,
-        worker: localState.workers.find((w) => w.id === bk.worker_id),
-        request: localState.requests.find((r) => r.id === bk.request_id),
+        ...updated,
+        worker: worker || undefined,
+        request,
       },
       isLiveDatabase: false,
+      isDemoSimulation: true,
     };
   },
 
@@ -962,30 +945,20 @@ export const api = {
     action: 'approved' | 'rejected',
     notes?: string
   ): Promise<ApiResponse<Booking>> {
-    const bk = localState.bookings.find((b) => b.id === bookingId);
-    if (!bk) throw new Error('Booking not found');
+    const updated = demoRepo.respondChangeOrder(bookingId, changeOrderId, action, notes);
+    if (!updated) throw new Error('Change order or booking not found');
 
-    const co = (bk.change_orders || []).find((c) => c.id === changeOrderId);
-    if (!co) throw new Error('Change order not found');
-
-    co.status = action;
-    co.responded_at = new Date().toISOString();
-    if (notes) co.customer_notes = notes;
-
-    if (action === 'approved') {
-      if (!bk.original_agreed_price) {
-        bk.original_agreed_price = bk.agreed_price;
-      }
-      bk.agreed_price = co.revised_total;
-    }
+    const worker = demoRepo.getWorkerById(updated.worker_id);
+    const request = demoRepo.getRequests().find((r) => r.id === updated.request_id);
 
     return {
       data: {
-        ...bk,
-        worker: localState.workers.find((w) => w.id === bk.worker_id),
-        request: localState.requests.find((r) => r.id === bk.request_id),
+        ...updated,
+        worker: worker || undefined,
+        request,
       },
       isLiveDatabase: false,
+      isDemoSimulation: true,
     };
   },
 
@@ -993,7 +966,7 @@ export const api = {
    * Get or generate a Repair Passport™ for a completed booking
    */
   async getRepairPassport(bookingId: string): Promise<ApiResponse<RepairPassport | null>> {
-    const bk = localState.bookings.find((b) => b.id === bookingId);
+    const bk = demoRepo.getBookings().find((b) => b.id === bookingId);
     if (!bk) throw new Error('Booking not found');
 
     if (bk.passport) {
@@ -1014,15 +987,15 @@ export const api = {
           amount: c.additional_amount,
         }));
       }
-      return { data: bk.passport, isLiveDatabase: false };
+      return { data: bk.passport, isLiveDatabase: false, isDemoSimulation: true };
     }
 
     if (bk.status !== 'completed') {
-      return { data: null, isLiveDatabase: false };
+      return { data: null, isLiveDatabase: false, isDemoSimulation: true };
     }
 
-    const req = localState.requests.find((r) => r.id === bk.request_id);
-    const worker = localState.workers.find((w) => w.id === bk.worker_id);
+    const req = demoRepo.getRequests().find((r) => r.id === bk.request_id);
+    const worker = demoRepo.getWorkerById(bk.worker_id);
 
     const unapprovedCount = (bk.change_orders || []).filter(
       (c) => c.status === 'pending_customer_approval'
@@ -1079,6 +1052,6 @@ export const api = {
     };
 
     bk.passport = generatedPassport;
-    return { data: generatedPassport, isLiveDatabase: false };
+    return { data: generatedPassport, isLiveDatabase: false, isDemoSimulation: true };
   },
 };

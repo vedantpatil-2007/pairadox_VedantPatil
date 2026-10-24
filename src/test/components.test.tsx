@@ -7,13 +7,13 @@ import { INITIAL_DEMO_WORKERS } from '../data/mockSeedData';
 import { DEFAULT_LOCATION } from '../lib/geo';
 
 describe('SkillNear UI Components Suite', () => {
-  it('renders BannerDisclaimer with clear hackathon evaluation notice', () => {
+  it('renders BannerDisclaimer with clear preview notice and storage explanation', () => {
     const onOpenSetup = vi.fn();
     render(<BannerDisclaimer isLiveDatabase={false} onOpenSetupModal={onOpenSetup} />);
 
-    expect(screen.getByText(/Hackathon Prototype/i)).toBeInTheDocument();
-    expect(screen.getByText(/All worker profiles, customer reviews, ratings/i)).toBeInTheDocument();
-    expect(screen.getByText(/Local Preview Simulation Mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/SkillNear Preview/i)).toBeInTheDocument();
+    expect(screen.getByText(/Worker listings are sample profiles/i)).toBeInTheDocument();
+    expect(screen.getByText(/saved in this browser only \(localStorage\)/i)).toBeInTheDocument();
   });
 
   it('renders WorkerCard with trade badge, distance, rates, and action buttons', () => {
@@ -36,7 +36,7 @@ describe('SkillNear UI Components Suite', () => {
     expect(screen.getByText(worker.name)).toBeInTheDocument();
     expect(screen.getByText('Electrician')).toBeInTheDocument();
     expect(screen.getByText('2.4 km away')).toBeInTheDocument();
-    expect(screen.getByText('Demo Profile')).toBeInTheDocument();
+    expect(screen.getByText(/Sample profile/i)).toBeInTheDocument();
 
     // Verify action buttons click correctly (no dead buttons)
     const viewBtn = screen.getByRole('button', { name: /View Rates & Info/i });
@@ -74,8 +74,8 @@ describe('SkillNear UI Components Suite', () => {
     );
 
     // Platform title
-    expect(screen.getByText(/Skill/i)).toBeInTheDocument();
-    expect(screen.getByText(/Near/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Skill/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Near/i).length).toBeGreaterThanOrEqual(1);
 
     // Location pill is present
     expect(screen.getByText(DEFAULT_LOCATION.name)).toBeInTheDocument();

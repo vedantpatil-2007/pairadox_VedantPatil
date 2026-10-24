@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Calendar, MapPin, IndianRupee, X, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Calendar, MapPin, IndianRupee, X, AlertCircle, Users } from 'lucide-react';
 import { Quote, Booking } from '../types';
 import { api } from '../services/api';
 
@@ -85,7 +85,16 @@ export const ConfirmBookingModal: React.FC<ConfirmBookingModalProps> = ({
         serviceAddress: quote.request?.customer_address || 'Service Location',
         agreedPrice: agreedAmount,
         scheduledFor: scheduledIso,
+        crewSize: quote.itemization?.offered_crew_size || quote.request?.crew_size || 1,
+        organizationName: quote.request?.organization_name,
+        supervisorName: quote.itemization?.supervisor_name,
       });
+
+      if (res.error) {
+        setIsSubmitting(false);
+        setErrorMsg(res.error);
+        return;
+      }
 
       setIsSubmitting(false);
       onClose();
@@ -152,6 +161,25 @@ export const ConfirmBookingModal: React.FC<ConfirmBookingModalProps> = ({
 
         {/* Job Details */}
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5 text-xs text-slate-600">
+          {((quote.itemization?.offered_crew_size || quote.request?.crew_size || 1) > 1) && (
+            <div className="flex justify-between items-center text-sky-900 bg-sky-100/70 p-2 rounded-lg border border-sky-200">
+              <span className="flex items-center gap-1.5 font-bold">
+                <Users className="w-3.5 h-3.5 text-sky-700" />
+                <span>Crew Allocation:</span>
+              </span>
+              <span className="font-extrabold text-sky-950">
+                {quote.itemization?.offered_crew_size || quote.request?.crew_size} Technicians
+              </span>
+            </div>
+          )}
+          {quote.request?.organization_name && (
+            <div className="flex justify-between">
+              <span>Organization:</span>
+              <span className="font-semibold text-slate-900">
+                {quote.request.organization_name}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Technician:</span>
             <span className="font-semibold text-slate-900">

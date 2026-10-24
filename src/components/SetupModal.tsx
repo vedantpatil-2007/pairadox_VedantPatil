@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Database, Copy, Check, X, ShieldAlert, FileCode2, Terminal, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Database, Copy, Check, X, ShieldAlert, FileCode2, Terminal, RefreshCw, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { getSupabaseConfigStatus, SupabaseConnectionResult } from '../lib/supabase';
 
 interface SetupModalProps {
@@ -7,6 +7,7 @@ interface SetupModalProps {
   onClose: () => void;
   dbStatus?: SupabaseConnectionResult;
   onRefreshConnection?: () => Promise<void>;
+  onResetDemo?: () => void;
 }
 
 const MIGRATION_SQL_SNIPPET = `-- SkillNear (PS03): Supabase PostgreSQL Least-Privilege Schema & Data API Grants
@@ -977,6 +978,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({
   onClose,
   dbStatus,
   onRefreshConnection,
+  onResetDemo,
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [copied, setCopied] = useState(false);
@@ -986,6 +988,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({
   // Single shared configuration check
   const status = getSupabaseConfigStatus();
   const isConnected = dbStatus?.isConnected ?? false;
+  const isOperationsVerified = Boolean(dbStatus?.operationsVerified);
   const connectionError = dbStatus?.error;
 
   useEffect(() => {
@@ -1076,11 +1079,13 @@ export const SetupModal: React.FC<SetupModalProps> = ({
           </button>
         </div>
 
-        {/* Current Connection Status Box - Accurate & Synchronized */}
+        {/* Current Connection Status Box - Accurate & Synchronized 3-Tier Model */}
         <div
           className={`p-4 rounded-xl border flex items-start justify-between gap-3 ${
-            isConnected
+            isOperationsVerified
               ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+              : isConnected
+              ? 'bg-sky-50 border-sky-200 text-sky-950'
               : status.isConfigured
               ? 'bg-amber-50 border-amber-300 text-amber-950'
               : 'bg-slate-50 border-slate-200 text-slate-900'
@@ -1089,8 +1094,10 @@ export const SetupModal: React.FC<SetupModalProps> = ({
           <div className="flex items-start gap-3">
             <div
               className={`w-3 h-3 rounded-full mt-1 shrink-0 ${
-                isConnected
+                isOperationsVerified
                   ? 'bg-emerald-500 animate-pulse'
+                  : isConnected
+                  ? 'bg-sky-500'
                   : status.isConfigured
                   ? 'bg-amber-500'
                   : 'bg-slate-400'
@@ -1098,17 +1105,24 @@ export const SetupModal: React.FC<SetupModalProps> = ({
             />
             <div className="space-y-1 text-xs sm:text-sm">
               <h3 className="font-semibold">
-                {isConnected
-                  ? 'Supabase Database Connected & Verified Active'
+                {isOperationsVerified
+                  ? 'Supabase Database Connected & Write Operations Verified'
+                  : isConnected
+                  ? 'Supabase Reachable — Corrective Schema Migration Pending'
                   : status.isConfigured
-                  ? 'Supabase Credentials Detected — Live Database Inactive'
-                  : 'Supabase Not Configured — Running in Local Preview Simulation'}
+                  ? 'Supabase Credentials Detected — Database Endpoint Unreachable'
+                  : 'Supabase Not Configured — Running in Demo Simulation Mode'}
               </h3>
               <p className="text-xs opacity-90">
-                {isConnected ? (
+                {isOperationsVerified ? (
                   <>
-                    Live database query verified on:{' '}
+                    Live database query and schema verified on:{' '}
                     <span className="font-mono font-medium">{status.url}</span>
+                  </>
+                ) : isConnected ? (
+                  <>
+                    Endpoint reachable on <span className="font-mono font-medium">{status.url}</span>,
+                    but corrective migrations (views/RLS) have not been run. Operating safely in local demo repository.
                   </>
                 ) : status.isConfigured ? (
                   <>
@@ -1242,24 +1256,45 @@ export const SetupModal: React.FC<SetupModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-[11px] text-slate-500">
-            {isConnected ? (
+            {isOperationsVerified ? (
               <span className="text-emerald-700 font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 PostgreSQL persistence active
               </span>
+            ) : isConnected ? (
+              <span className="text-sky-700 font-semibold flex items-center gap-1">
+                <Database className="w-3.5 h-3.5" />
+                Supabase reachable (Local browser writes active)
+              </span>
             ) : (
-              <span>Simulation mode fallback active</span>
+              <span>Local browser storage mode active</span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            {onResetDemo && (
+              <button
+                type="button"
+                onClick={() => {
+                  onResetDemo();
+                  onClose();
+                }}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
+                title="Reset browser demo repository to clean initial fixtures"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset Local Data</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </dialog>

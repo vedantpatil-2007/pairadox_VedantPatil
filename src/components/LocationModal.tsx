@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Check, AlertCircle, X } from 'lucide-react';
+import { MapPin, Navigation, Check, AlertCircle, X, RotateCcw, Search, Plus } from 'lucide-react';
 import { UserLocation } from '../types';
-import { POPULAR_LOCATIONS } from '../lib/geo';
+import { POPULAR_LOCATIONS, DEFAULT_LOCATION } from '../lib/geo';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -19,6 +19,35 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [showCustomCoords, setShowCustomCoords] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customLat, setCustomLat] = useState('12.9352');
+  const [customLng, setCustomLng] = useState('77.6245');
+
+  const handleApplyCustom = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsedLat = parseFloat(customLat);
+    const parsedLng = parseFloat(customLng);
+    if (isNaN(parsedLat) || isNaN(parsedLng)) {
+      setGeoError('Please enter valid numeric latitude and longitude coordinates.');
+      return;
+    }
+
+    const name = customName.trim() || `Custom (${parsedLat.toFixed(4)}, ${parsedLng.toFixed(4)})`;
+    onSelectLocation({
+      name,
+      address: `Manual Map Coordinates: ${parsedLat.toFixed(4)}, ${parsedLng.toFixed(4)}`,
+      lat: parsedLat,
+      lng: parsedLng,
+      isDetected: false,
+    });
+    onClose();
+  };
+
+  const handleResetToDefault = () => {
+    onSelectLocation(DEFAULT_LOCATION);
+    onClose();
+  };
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -185,12 +214,80 @@ export const LocationModal: React.FC<LocationModalProps> = ({
           </div>
         </div>
 
+        {/* Option 3: Manual Exact Map Coordinates */}
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => setShowCustomCoords((s) => !s)}
+            className="text-xs font-semibold text-brand-600 hover:text-brand-800 flex items-center gap-1 cursor-pointer"
+          >
+            <span>{showCustomCoords ? '− Hide Custom Coordinates' : '+ Enter Custom Coordinates / Map Position'}</span>
+          </button>
+
+          {showCustomCoords && (
+            <form onSubmit={handleApplyCustom} className="mt-2.5 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700">Location Label / Area Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Whitefield Export Promotion Zone"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-700">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={customLat}
+                    onChange={(e) => setCustomLat(e.target.value)}
+                    required
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-700">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={customLng}
+                    onChange={(e) => setCustomLng(e.target.value)}
+                    required
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-1 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+                >
+                  Set Custom Position
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
         {/* Footer */}
-        <div className="pt-3 border-t border-slate-100 flex justify-end">
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleResetToDefault}
+            className="text-xs text-slate-500 hover:text-slate-800 font-medium flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset to Default ({DEFAULT_LOCATION.name})</span>
+          </button>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             Done
           </button>

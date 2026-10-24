@@ -10,6 +10,7 @@ import {
   MapPin,
   AlertCircle,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 import { Worker, Trade, UserLocation } from '../types';
 import { WorkerCard } from './WorkerCard';
@@ -108,14 +109,12 @@ export const WorkerList: React.FC<WorkerListProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Hero Welcome & Broadcast CTA */}
-      <div className="bg-gradient-to-r from-brand-900 via-brand-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-brand-500/20 to-transparent pointer-events-none" />
-
+      {/* 1. HERO WELCOME & BROADCAST CTA (Original SkillNear Theme) */}
+      <div className="bg-gradient-to-r from-brand-900 via-brand-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
         <div className="max-w-2xl space-y-3 relative z-10">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white text-xs font-semibold backdrop-blur-xs border border-white/20">
             <MapPin className="w-3.5 h-3.5 text-brand-300" />
-            <span>Hyperlocal Service Hub: {currentLocation.name}</span>
+            <span>Hyperlocal Service Hub: <strong>{currentLocation.name}</strong></span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
@@ -123,7 +122,7 @@ export const WorkerList: React.FC<WorkerListProps> = ({
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-            Need urgent home repairs? Browse nearby certified demo specialists or broadcast your
+            Need urgent home repairs? Browse nearby certified specialists or broadcast your
             job to receive direct competitive quotes in minutes.
           </p>
 
@@ -133,17 +132,21 @@ export const WorkerList: React.FC<WorkerListProps> = ({
               onClick={onOpenNewRequest}
               className="px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 text-brand-200" />
               <span>Broadcast a Job Request</span>
             </button>
-            <span className="text-xs text-slate-400">
-              Deterministic distance matching within 10 km
+          </div>
+
+          <div className="pt-2 border-t border-white/15 flex items-center gap-2 text-xs text-brand-200">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              <strong>ScopeLock™ + FairDeal™:</strong> Clear scope. Comparable quotes. No unapproved changes.
             </span>
           </div>
         </div>
       </div>
 
-      {/* Category Pills Filter Bar */}
+      {/* 2. CATEGORY PILLS FILTER BAR */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         {categories.map((cat) => {
           const Icon = cat.icon;
@@ -166,7 +169,7 @@ export const WorkerList: React.FC<WorkerListProps> = ({
         })}
       </div>
 
-      {/* Search & Sort Controls Bar */}
+      {/* 3. SEARCH & SORT CONTROLS BAR */}
       <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative flex-1">

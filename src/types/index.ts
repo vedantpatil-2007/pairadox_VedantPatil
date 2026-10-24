@@ -73,6 +73,10 @@ export interface ServiceRequest {
   description: string;
   urgency: Urgency;
   budget?: number;
+  crew_size?: number; // 1-20 workers (Crew Mode)
+  organization_name?: string; // Optional commercial/organization name
+  duration_unit?: 'hours' | 'days';
+  duration_value?: number;
   preferred_worker_id?: string | null;
   status: RequestStatus;
   scope?: ScopeLock; // Structured ScopeLock baseline
@@ -91,6 +95,14 @@ export interface QuoteItemization {
   total_price: number; // validated = labour_charge + materials_charge + travel_fee
   included_work: string[];
   exclusions: string[];
+  // Crew Mode (Team FairDeal)
+  offered_crew_size?: number;
+  requested_crew_size?: number;
+  crew_rate_per_person?: number;
+  crew_duration_value?: number;
+  crew_duration_unit?: 'hours' | 'days';
+  shortfall?: number; // max(0, requested - offered)
+  supervisor_name?: string;
   materials_breakdown?: {
     name?: string;
     item?: string;
@@ -119,6 +131,9 @@ export interface Quote {
   counter_notes?: string | null;
   last_updated_by: 'worker' | 'customer';
   itemization?: QuoteItemization; // FairDeal itemization
+  offered_crew_size?: number;
+  shortfall?: number;
+  supervisor_name?: string;
   created_at: string;
   updated_at: string;
   // Joins
@@ -141,6 +156,12 @@ export interface ChangeOrder {
   additional_amount: number;
   revised_total: number; // original_price + additional_amount
   status: ChangeOrderStatus;
+  crew_adjustment?: {
+    added_workers: number;
+    added_duration?: number;
+    duration_unit?: 'hours' | 'days';
+    reason: string;
+  };
   created_at: string;
   responded_at?: string | null;
   customer_notes?: string | null;
@@ -185,6 +206,9 @@ export interface Booking {
   service_address: string;
   agreed_price: number;
   original_agreed_price?: number;
+  crew_size?: number;
+  organization_name?: string;
+  supervisor_name?: string;
   scheduled_for: string;
   status: BookingStatus;
   completion_notes?: string | null;

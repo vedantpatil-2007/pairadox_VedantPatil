@@ -25,5 +25,5 @@ describe('Shared Supabase Configuration & Connection Verification', () => {
       expect(result.error).toBeDefined();
       expect(typeof result.error).toBe('string');
     }
-  });
+  }, 15000);
 });

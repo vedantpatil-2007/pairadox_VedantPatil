@@ -15,6 +15,7 @@ import {
   Trash2,
   ShieldCheck,
   Building,
+  Users,
 } from 'lucide-react';
 import { Trade, Urgency, UserLocation, Worker, ScopeLock } from '../types';
 import { api } from '../services/api';
@@ -74,6 +75,10 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
   const [customerPhone, setCustomerPhone] = useState('+91 98450 12345');
   const [customerAddress, setCustomerAddress] = useState(currentLocation.address);
   const [propertyType, setPropertyType] = useState('Apartment / Flat');
+  const [crewSize, setCrewSize] = useState<number>(1);
+  const [organizationName, setOrganizationName] = useState<string>('');
+  const [durationValue, setDurationValue] = useState<number>(2);
+  const [durationUnit, setDurationUnit] = useState<'hours' | 'days'>('hours');
 
   // ScopeLock Structured State (Phase 1)
   const [showScopeLock, setShowScopeLock] = useState(true);
@@ -219,9 +224,19 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
         description: description.trim(),
         urgency,
         budget: budget ? parseFloat(budget) : undefined,
+        crew_size: crewSize,
+        organization_name: organizationName.trim() || undefined,
+        duration_value: durationValue,
+        duration_unit: durationUnit,
         preferred_worker_id: preselectedWorker ? preselectedWorker.id : null,
         scope: scopeData,
       });
+
+      if (res.error) {
+        setIsSubmitting(false);
+        setErrorMsg(res.error);
+        return;
+      }
 
       setIsSuccess(true);
       setTimeout(() => {
@@ -370,6 +385,115 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
                 placeholder="What exactly is happening? (e.g. When the kitchen tap runs, water pools into the cabinet below...)"
                 className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-slate-900"
               />
+            </div>
+
+            {/* CREW MODE — Worker Count & Commercial Org */}
+            <div className="p-3.5 bg-sky-50/60 rounded-xl border border-sky-200/90 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
+                      <span>Crew Mode (Team Size)</span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                          crewSize > 1 ? 'bg-sky-200 text-sky-900' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {crewSize === 1 ? 'Individual' : `Team of ${crewSize} Technicians`}
+                      </span>
+                    </span>
+                    <p className="text-[11px] text-slate-500">
+                      Need multiple technicians for an apartment, office, or large renovation?
+                    </p>
+                  </div>
+                </div>
+
+                {/* Accessible Worker Count Selector (1-20) */}
+                <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                  <label htmlFor="crew-size-input" className="text-xs font-medium text-slate-600 mr-1">
+                    Workers:
+                  </label>
+                  <div className="flex items-center bg-white border border-slate-300 rounded-lg shadow-xs overflow-hidden">
+                    <button
+                      type="button"
+                      aria-label="Decrease worker count"
+                      onClick={() => setCrewSize((prev) => Math.max(1, prev - 1))}
+                      className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 text-sm font-bold cursor-pointer disabled:opacity-40"
+                      disabled={crewSize <= 1}
+                    >
+                      −
+                    </button>
+                    <input
+                      id="crew-size-input"
+                      type="number"
+                      aria-label="Worker count selector"
+                      min={1}
+                      max={20}
+                      value={crewSize}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) setCrewSize(Math.max(1, Math.min(20, val)));
+                      }}
+                      className="w-12 text-center text-xs font-bold text-slate-900 border-x border-slate-200 py-1 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Increase worker count"
+                      onClick={() => setCrewSize((prev) => Math.min(20, prev + 1))}
+                      className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 text-sm font-bold cursor-pointer disabled:opacity-40"
+                      disabled={crewSize >= 20}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expected Duration & Commercial Client Org Name */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-sky-100">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    <span>Estimated Duration</span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={durationValue}
+                      onChange={(e) => setDurationValue(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-20 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                      placeholder="e.g. 4"
+                    />
+                    <select
+                      value={durationUnit}
+                      onChange={(e) => setDurationUnit(e.target.value as 'hours' | 'days')}
+                      className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    >
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                    <Building className="w-3 h-3 text-slate-400" />
+                    <span>Company / Org Name (Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={organizationName}
+                    onChange={(e) => setOrganizationName(e.target.value)}
+                    placeholder="e.g. WeWork Indiranagar / RWA"
+                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* SCOPELOCK™ STRUCTURED SPECIFICATION */}

@@ -13,6 +13,7 @@ import {
   Check,
   X,
   History,
+  Users,
 } from 'lucide-react';
 import { Booking } from '../types';
 import { api } from '../services/api';
@@ -156,6 +157,17 @@ export const CustomerBookingsView: React.FC<CustomerBookingsViewProps> = ({
                   <span className="text-xs text-slate-400">
                     Booking ID: <code className="font-mono text-slate-600">{bk.id.slice(0, 8)}</code>
                   </span>
+                  {bk.crew_size && bk.crew_size > 1 && (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Team of {bk.crew_size} Technicians</span>
+                    </span>
+                  )}
+                  {bk.organization_name && (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      Org: {bk.organization_name}
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-left sm:text-right">
@@ -187,6 +199,11 @@ export const CustomerBookingsView: React.FC<CustomerBookingsViewProps> = ({
                     </span>
                     <h4 className="text-sm font-bold text-slate-900">{bk.worker?.name || 'Technician'}</h4>
                     <p className="text-slate-500 capitalize">{bk.worker?.trade}</p>
+                    {bk.supervisor_name && (
+                      <p className="text-indigo-700 font-medium text-[11px]">
+                        Supervisor: {bk.supervisor_name}
+                      </p>
+                    )}
                     <p className="text-slate-600 font-mono text-[11px]">{bk.worker?.phone}</p>
                   </div>
                 </div>
@@ -251,6 +268,15 @@ export const CustomerBookingsView: React.FC<CustomerBookingsViewProps> = ({
                         <div>
                           <span className="font-bold text-slate-900 block text-sm">{co.title}</span>
                           <p className="text-slate-600 italic mt-0.5">&ldquo;{co.reason}&rdquo;</p>
+                          {co.crew_adjustment && (
+                            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-medium">
+                              <Users className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>
+                                Crew Adjustment: +{co.crew_adjustment.added_workers} worker(s)
+                                {co.crew_adjustment.added_duration ? ` for ${co.crew_adjustment.added_duration} ${co.crew_adjustment.duration_unit || 'days'}` : ''}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="text-right shrink-0">
                           <span className="text-[11px] text-slate-400 block">Proposed Price</span>
@@ -300,6 +326,11 @@ export const CustomerBookingsView: React.FC<CustomerBookingsViewProps> = ({
                       >
                         <span className="text-slate-700">
                           {co.title} (+₹{co.additional_amount})
+                          {co.crew_adjustment && (
+                            <span className="text-indigo-600 font-semibold ml-1">
+                              [+{co.crew_adjustment.added_workers} crew]
+                            </span>
+                          )}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -325,7 +356,7 @@ export const CustomerBookingsView: React.FC<CustomerBookingsViewProps> = ({
                       Job completed on {bk.completed_at ? new Date(bk.completed_at).toLocaleDateString() : 'today'}
                     </span>
                   ) : (
-                    <span>Simulate job workflow progression for hackathon review</span>
+                    <span>Simulate job workflow progression for preview</span>
                   )}
                 </div>
 

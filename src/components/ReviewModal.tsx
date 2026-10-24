@@ -83,6 +83,12 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         comment: comment.trim(),
       });
 
+      if (res.error) {
+        setIsSubmitting(false);
+        setErrorMsg(res.error);
+        return;
+      }
+
       setIsSubmitting(false);
       onClose();
       onReviewSubmitted(res.data);

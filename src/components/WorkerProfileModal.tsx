@@ -143,13 +143,11 @@ export const WorkerProfileModal: React.FC<WorkerProfileModalProps> = ({
           </button>
         </div>
 
-        {/* Evaluation Disclaimer Box */}
-        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        {/* Profile Notice Box */}
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700">
+          <AlertTriangle className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
           <span>
-            <strong>Fictional Demonstration Profile:</strong> This profile is generated for
-            PS03 hackathon evaluation. No genuine government identity certification or commercial
-            licensing is claimed.
+            <strong>Sample Profile:</strong> This profile is generated as a demonstration record. Real-world identity verification and commercial licensing are not established for sample profiles.
           </span>
         </div>
 

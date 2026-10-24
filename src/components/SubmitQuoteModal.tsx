@@ -14,6 +14,7 @@ import {
   Wrench,
   Package,
   Car,
+  Users,
 } from 'lucide-react';
 import { ServiceRequest, Worker, Quote, QuoteItemization } from '../types';
 import { api } from '../services/api';
@@ -36,6 +37,20 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  // Crew Mode (Team FairDeal) State
+  const requestedCrew = request?.crew_size || 1;
+  const [offeredCrewSize, setOfferedCrewSize] = useState<number>(requestedCrew);
+  const [supervisorName, setSupervisorName] = useState<string>(worker?.name || '');
+  const [crewRatePerPerson, setCrewRatePerPerson] = useState<string>(
+    worker?.hourly_rate ? worker.hourly_rate.toString() : '400'
+  );
+  const [crewDurationValue, setCrewDurationValue] = useState<number>(
+    request?.duration_value || 2
+  );
+  const [crewDurationUnit, setCrewDurationUnit] = useState<'hours' | 'days'>(
+    request?.duration_unit || 'hours'
+  );
+
   // FairDeal Itemized Pricing State
   const [labourCharge, setLabourCharge] = useState<string>('350');
   const [materialsCharge, setMaterialsCharge] = useState<string>('100');
@@ -55,14 +70,30 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
   useEffect(() => {
     if (request) {
       const budget = request.budget || 500;
-      const initialLabour = Math.max(150, Math.round(budget * 0.7));
+      const reqCrew = request.crew_size || 1;
+      setOfferedCrewSize(reqCrew);
+      if (worker) setSupervisorName(worker.name);
+      if (request.duration_value) setCrewDurationValue(request.duration_value);
+      if (request.duration_unit) setCrewDurationUnit(request.duration_unit);
+
+      let initialLabour: number;
+      if (reqCrew > 1 && worker?.hourly_rate) {
+        const hours = request.duration_unit === 'days' ? (request.duration_value || 1) * 8 : (request.duration_value || 2);
+        initialLabour = reqCrew * worker.hourly_rate * hours;
+      } else {
+        initialLabour = Math.max(150, Math.round(budget * 0.7));
+      }
       const initialMaterials = Math.max(0, Math.round(budget * 0.2));
       const initialTravel = Math.max(0, budget - initialLabour - initialMaterials);
 
       setLabourCharge(initialLabour.toString());
       setMaterialsCharge(initialMaterials.toString());
       setTravelFee(initialTravel.toString());
-      setNotes('Can reach with all necessary diagnostic tools and replacement parts.');
+      setNotes(
+        reqCrew > 1
+          ? `Will deploy experienced team of ${reqCrew} technicians with full on-site supervision.`
+          : 'Can reach with all necessary diagnostic tools and replacement parts.'
+      );
 
       if (request.scope?.requested_work) {
         setIncludedWork([...request.scope.requested_work]);
@@ -76,7 +107,7 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
         setExclusions(['Wall masonry chipping']);
       }
     }
-  }, [request]);
+  }, [request, worker]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -151,6 +182,7 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
 
+    const shortfall = Math.max(0, requestedCrew - offeredCrewSize);
     const itemization: QuoteItemization = {
       labour_charge: parsedLabour,
       materials_charge: parsedMaterials,
@@ -159,6 +191,13 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
       included_work: includedWork.length > 0 ? includedWork : [request.title],
       exclusions,
       parts_policy: partsPolicy.trim(),
+      offered_crew_size: offeredCrewSize,
+      requested_crew_size: requestedCrew,
+      crew_rate_per_person: parseFloat(crewRatePerPerson) || 0,
+      crew_duration_value: crewDurationValue,
+      crew_duration_unit: crewDurationUnit,
+      shortfall,
+      supervisor_name: supervisorName.trim() || worker.name,
     };
 
     try {
@@ -166,10 +205,16 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
         request_id: request.id,
         worker_id: worker.id,
         amount: totalAmount,
-        estimated_duration: duration,
+        estimated_duration: `${crewDurationValue} ${crewDurationUnit}`,
         notes: notes.trim(),
         itemization,
       });
+
+      if (res.error) {
+        setIsSubmitting(false);
+        setErrorMsg(res.error);
+        return;
+      }
 
       setIsSubmitting(false);
       onClose();
@@ -250,6 +295,116 @@ export const SubmitQuoteModal: React.FC<SubmitQuoteModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {/* Team Capacity & Supervision */}
+          <div className="p-3.5 bg-sky-50/70 rounded-2xl border border-sky-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sky-950 flex items-center gap-1.5 text-xs">
+                    <span>Crew Mode Capacity</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-sky-200 text-sky-900">
+                      Requested: {requestedCrew} {requestedCrew === 1 ? 'Worker' : 'Workers'}
+                    </span>
+                  </span>
+                  <p className="text-[11px] text-slate-500">
+                    Specify offered workforce and assign on-site team supervision
+                  </p>
+                </div>
+              </div>
+
+              {/* Offered worker count selector */}
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <label htmlFor="offered-crew-input" className="text-xs font-medium text-slate-700">
+                  Offered:
+                </label>
+                <div className="flex items-center bg-white border border-slate-300 rounded-lg shadow-xs overflow-hidden">
+                  <button
+                    type="button"
+                    aria-label="Decrease offered workers"
+                    onClick={() => setOfferedCrewSize((prev) => Math.max(1, prev - 1))}
+                    className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 text-sm font-bold cursor-pointer disabled:opacity-40"
+                    disabled={offeredCrewSize <= 1}
+                  >
+                    −
+                  </button>
+                  <input
+                    id="offered-crew-input"
+                    type="number"
+                    aria-label="Offered crew size"
+                    min={1}
+                    max={20}
+                    value={offeredCrewSize}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val)) setOfferedCrewSize(Math.max(1, Math.min(20, val)));
+                    }}
+                    className="w-12 text-center text-xs font-bold text-slate-900 border-x border-slate-200 py-1 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Increase offered workers"
+                    onClick={() => setOfferedCrewSize((prev) => Math.min(20, prev + 1))}
+                    className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 text-sm font-bold cursor-pointer disabled:opacity-40"
+                    disabled={offeredCrewSize >= 20}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Capacity Shortfall Warning if offered < requested */}
+            {offeredCrewSize < requestedCrew && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-semibold">Capacity Shortfall Notice:</strong> Customer requested{' '}
+                  <span className="font-bold">{requestedCrew} workers</span>, but your quote offers{' '}
+                  <span className="font-bold">{offeredCrewSize}</span> (Shortfall of -{requestedCrew - offeredCrewSize} workers).
+                  This difference will be highlighted in the customer comparison view.
+                </div>
+              </div>
+            )}
+
+            {/* Crew Supervisor / Lead Name */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-sky-100">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700">
+                  Lead Technician / Crew Supervisor
+                </label>
+                <input
+                  type="text"
+                  value={supervisorName}
+                  onChange={(e) => setSupervisorName(e.target.value)}
+                  placeholder="e.g. Ramesh Kumar (Lead Wireman)"
+                  className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700">
+                  Quick Team Labour Calculator
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rate = worker?.hourly_rate || 400;
+                    const hours = crewDurationUnit === 'days' ? crewDurationValue * 8 : crewDurationValue;
+                    const computed = offeredCrewSize * rate * hours;
+                    setLabourCharge(computed.toString());
+                  }}
+                  className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-white border border-sky-300 hover:bg-sky-100 text-sky-800 font-medium transition-colors text-left truncate cursor-pointer"
+                  title="Click to calculate labour = workers × hourly rate × duration"
+                >
+                  ⚡ Set Labour: {offeredCrewSize} × ₹{worker?.hourly_rate || 400} × {crewDurationValue} {crewDurationUnit}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* FairDeal Itemized Breakdown Inputs */}
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">

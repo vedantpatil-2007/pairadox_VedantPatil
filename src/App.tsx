@@ -16,12 +16,32 @@ import { SubmitQuoteModal } from './components/SubmitQuoteModal';
 import { QuoteComparisonModal } from './components/QuoteComparisonModal';
 import { ProposeChangeOrderModal } from './components/ProposeChangeOrderModal';
 import { RepairPassportModal } from './components/RepairPassportModal';
+import { AuthModal } from './components/AuthModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 
 import { Worker, ServiceRequest, Quote, Booking, UserLocation, Review } from './types';
 import { DEFAULT_LOCATION } from './lib/geo';
 import { api } from './services/api';
-import { isSupabaseConfigured, getSupabaseConfigStatus, verifySupabaseConnection, SupabaseConnectionResult, initAnonymousAuth } from './lib/supabase';
+import {
+  isSupabaseConfigured,
+  getSupabaseConfigStatus,
+  SupabaseConnectionResult,
+  AuthUser,
+} from './lib/supabase';
+
+const getInitialStoredSession = (): AuthUser | null => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = window.localStorage.getItem('skillnear_demo_session_v2');
+      if (stored) {
+        return JSON.parse(stored) as AuthUser;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+  return null;
+};
 
 export function App() {
   // Global Data State
@@ -31,10 +51,16 @@ export function App() {
   const [bookings, setBookings] = useState<Booking[]>([]);
 
   // Navigation & Role State
-  const [currentRole, setCurrentRole] = useState<'customer' | 'worker'>('customer');
+  const initialUser = getInitialStoredSession();
+  const [currentRole, setCurrentRole] = useState<'customer' | 'worker'>(initialUser?.role || 'customer');
   const [activeWorker, setActiveWorker] = useState<Worker | null>(null);
   const [activeTab, setActiveTab] = useState<'workers' | 'requests' | 'bookings'>('workers');
   const [activeWorkerTab, setActiveWorkerTab] = useState<'dashboard' | 'worker-quotes' | 'worker-bookings'>('dashboard');
+
+  // Authenticated User & Auth Modal State
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalInitialTab, setAuthModalInitialTab] = useState<'signin' | 'register'>('signin');
 
   // Hyperlocal Location State
   const [currentLocation, setCurrentLocation] = useState<UserLocation>(DEFAULT_LOCATION);
@@ -46,6 +72,7 @@ export function App() {
   const [dbStatus, setDbStatus] = useState<SupabaseConnectionResult>(() => ({
     isConfigured: getSupabaseConfigStatus().isConfigured,
     isConnected: false,
+    operationsVerified: false,
     url: getSupabaseConfigStatus().url,
   }));
 
@@ -99,17 +126,19 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      // 1. Verify actual Supabase connection status with real request
-      const connectionResult = await verifySupabaseConnection();
-      setDbStatus(connectionResult);
-      setIsLiveDatabase(connectionResult.isConnected);
+      // 1. Verify 3-tier health status: configured, reachable, verified
+      const health = await api.getHealthStatus();
+      setDbStatus(health);
+      setIsLiveDatabase(health.operationsVerified);
 
-      // Initialize anonymous authentication session for ownership RLS policies
-      if (connectionResult.isConnected) {
-        await initAnonymousAuth();
+      // 2. Restore active session
+      const user = await api.getCurrentUser();
+      setCurrentUser(user);
+      if (user?.role) {
+        setCurrentRole(user.role);
       }
 
-      // 2. Load application data
+      // 3. Load application data
       const [workersRes, requestsRes, quotesRes, bookingsRes] = await Promise.all([
         api.getWorkers(),
         api.getServiceRequests(),
@@ -122,48 +151,88 @@ export function App() {
       setQuotes(quotesRes.data);
       setBookings(bookingsRes.data);
 
-      if (connectionResult.isConnected) {
-        setIsLiveDatabase(true);
-      }
-
       // Default active worker persona if not set
       if (!activeWorker && workersRes.data.length > 0) {
-        const plumber = workersRes.data.find((w) => w.trade === 'plumber') || workersRes.data[0];
+        const plumber = workersRes.data.find((w: Worker) => w.trade === 'plumber') || workersRes.data[0];
         setActiveWorker(plumber);
       }
     } catch (err: unknown) {
       console.error('Error loading SkillNear data:', err);
-      setError('Unable to load technicians and jobs. Showing local offline data.');
+      setError('Unable to load technicians and jobs. Showing local data.');
     } finally {
       setLoading(false);
     }
   }, [activeWorker]);
 
   const handleRefreshConnection = useCallback(async () => {
-    const res = await verifySupabaseConnection();
-    setDbStatus(res);
-    setIsLiveDatabase(res.isConnected);
-    if (res.isConnected) {
+    const health = await api.getHealthStatus();
+    setDbStatus(health);
+    setIsLiveDatabase(health.operationsVerified);
+    if (health.operationsVerified) {
       addToast({
         type: 'success',
-        title: 'Supabase Database Connected!',
+        title: 'Supabase Live Verified!',
         description: 'Persistent PostgreSQL storage is verified and active.',
       });
       loadData();
-    } else if (res.isConfigured) {
+    } else if (health.isReachable) {
+      addToast({
+        type: 'info',
+        title: 'Supabase Connected (Simulated Writes)',
+        description: 'PostgreSQL endpoint reachable. Corrective migration pending execution.',
+      });
+      loadData();
+    } else if (health.isConfigured) {
       addToast({
         type: 'error',
-        title: 'Database Query Unsuccessful',
-        description: res.error || 'Please run the schema migration in Supabase SQL editor.',
+        title: 'Database Endpoint Unreachable',
+        description: health.error || 'Please verify network and database configuration.',
       });
     } else {
       addToast({
         type: 'info',
-        title: 'Credentials Missing',
-        description: 'Please add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env.',
+        title: 'Demo Simulation Active',
+        description: 'Operating in local browser storage demo mode.',
       });
     }
   }, [addToast, loadData]);
+
+  const handleResetDemoData = useCallback(() => {
+    api.resetDemoData();
+    addToast({
+      type: 'info',
+      title: 'Demo Data Reset',
+      description: 'Restored all requests, quotes, bookings, and worker rating baselines to clean seed fixtures.',
+    });
+    loadData();
+  }, [addToast, loadData]);
+
+  const handleAuthSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    if (user.role) {
+      setCurrentRole(user.role);
+    }
+    setAuthModalOpen(false);
+    addToast({
+      type: 'success',
+      title: `Signed in as ${user.name || user.email}`,
+      description: user.is_demo
+        ? 'Operating in simulated demo session.'
+        : 'Authenticated with Supabase Auth.',
+    });
+    loadData();
+  };
+
+  const handleSignOut = async () => {
+    await api.signOut();
+    setCurrentUser(null);
+    addToast({
+      type: 'info',
+      title: 'Signed Out',
+      description: 'Browsing public marketplace as guest.',
+    });
+    loadData();
+  };
 
   useEffect(() => {
     loadData();
@@ -179,7 +248,7 @@ export function App() {
     addToast({
       type: 'success',
       title: 'Job Request Broadcasted!',
-      description: 'Nearby verified technicians can now review your job and send quotes.',
+      description: 'Saved and broadcasted. Nearby verified technicians can now review your job and send quotes.',
     });
     loadData();
     setActiveTab('requests');
@@ -205,17 +274,17 @@ export function App() {
     setConfirmBookingModalOpen(true);
   };
 
-  const handleBookingConfirmed = (booking: Booking) => {
+  const handleBookingConfirmed = (_newBooking: Booking) => {
     addToast({
       type: 'success',
-      title: 'Service Booking Confirmed!',
-      description: `Appointment confirmed with ${booking.worker?.name || 'technician'} for ₹${booking.agreed_price}.`,
+      title: 'Booking Confirmed!',
+      description: 'Technician has been notified. Track updates in your active bookings.',
     });
     loadData();
     setActiveTab('bookings');
   };
 
-  const handleOpenReviewModal = (booking: Booking) => {
+  const handleOpenReview = (booking: Booking) => {
     setSelectedBookingForReview(booking);
     setReviewModalOpen(true);
   };
@@ -229,22 +298,12 @@ export function App() {
     loadData();
   };
 
-  const handleQuoteSubmitted = (newQuote: Quote) => {
-    addToast({
-      type: 'success',
-      title: 'Quote Sent to Customer!',
-      description: `Quoted ₹${newQuote.amount}. Customer will be notified to review.`,
-    });
-    loadData();
-    setActiveWorkerTab('worker-quotes');
-  };
-
-  const handleOpenCompareQuotes = (request: ServiceRequest) => {
+  const handleOpenQuoteComparison = (request: ServiceRequest) => {
     setSelectedRequestForComparison(request);
     setQuoteComparisonModalOpen(true);
   };
 
-  const handleOpenProposeChangeOrder = (booking: Booking) => {
+  const handleOpenChangeOrder = (booking: Booking) => {
     setSelectedBookingForChangeOrder(booking);
     setProposeChangeOrderModalOpen(true);
   };
@@ -252,8 +311,8 @@ export function App() {
   const handleChangeOrderProposed = (_updatedBooking: Booking) => {
     addToast({
       type: 'success',
-      title: 'Change Order Proffered (Locked)!',
-      description: 'Customer must explicitly approve the revised total before changes take effect.',
+      title: 'Change-Order Submitted!',
+      description: 'Work is paused pending customer approval. Price adjustment locked.',
     });
     loadData();
   };
@@ -263,20 +322,31 @@ export function App() {
     setRepairPassportModalOpen(true);
   };
 
+  const handleQuoteSubmitted = (_newQuote: Quote) => {
+    addToast({
+      type: 'success',
+      title: 'Quote Sent to Customer!',
+      description: 'Your quote with ScopeLock breakdown has been delivered to the customer.',
+    });
+    loadData();
+    setActiveWorkerTab('worker-quotes');
+  };
+
+  // DIRECT APPLICATION VIEW: ALWAYS OPEN TO MARKETPLACE
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      {/* Navigation Bar */}
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 antialiased selection:bg-brand-500 selection:text-white">
+      {/* Application Navbar */}
       <Navbar
         currentRole={currentRole}
         onRoleChange={(role) => {
           setCurrentRole(role);
           addToast({
             type: 'info',
-            title: role === 'customer' ? 'Switched to Customer Experience' : 'Switched to Worker Portal',
+            title: role === 'customer' ? 'Customer Mode Active' : 'Worker Portal Active',
             description:
               role === 'customer'
-                ? 'Browsing as Customer Rahul Sharma'
-                : `Acting as Technician ${activeWorker?.name || 'Ramesh Kumar'}`,
+                ? 'Search nearby technicians, post jobs & view quotes.'
+                : 'Browse incoming job leads & submit quotes.',
           });
         }}
         activeWorker={activeWorker}
@@ -293,8 +363,22 @@ export function App() {
         onOpenLocationModal={() => setLocationModalOpen(true)}
         onOpenSetupModal={() => setSetupModalOpen(true)}
         isLiveDatabase={isLiveDatabase}
-        activeTab={activeTab}
-        onSelectTab={(tab) => setActiveTab(tab as 'workers' | 'requests' | 'bookings')}
+        dbStatus={dbStatus}
+        currentUser={currentUser}
+        onOpenAuthModal={(tab) => {
+          setAuthModalInitialTab(tab || 'signin');
+          setAuthModalOpen(true);
+        }}
+        onSignOut={handleSignOut}
+        onResetDemo={handleResetDemoData}
+        activeTab={currentRole === 'customer' ? activeTab : activeWorkerTab}
+        onSelectTab={(tab) => {
+          if (currentRole === 'customer') {
+            setActiveTab(tab as 'workers' | 'requests' | 'bookings');
+          } else {
+            setActiveWorkerTab(tab as 'dashboard' | 'worker-quotes' | 'worker-bookings');
+          }
+        }}
         onOpenNewRequest={() => handleOpenPostRequest(null)}
       />
 
@@ -303,6 +387,7 @@ export function App() {
         isLiveDatabase={isLiveDatabase}
         dbStatus={dbStatus}
         onOpenSetupModal={() => setSetupModalOpen(true)}
+        onResetDemo={handleResetDemoData}
       />
 
       {/* Main View Container */}
@@ -332,9 +417,9 @@ export function App() {
                 quotes={quotes}
                 loading={loading}
                 onOpenNewRequest={() => handleOpenPostRequest(null)}
-                onOpenCounteroffer={(q) => handleOpenCounteroffer(q, 'customer')}
-                onOpenConfirmBooking={(q) => handleOpenConfirmBooking(q)}
-                onOpenCompareQuotes={(req) => handleOpenCompareQuotes(req)}
+                onOpenConfirmBooking={handleOpenConfirmBooking}
+                onOpenCounteroffer={(q: Quote) => handleOpenCounteroffer(q, 'customer')}
+                onOpenCompareQuotes={handleOpenQuoteComparison}
               />
             )}
 
@@ -342,33 +427,38 @@ export function App() {
               <CustomerBookingsView
                 bookings={bookings}
                 loading={loading}
-                onOpenReviewModal={(bk) => handleOpenReviewModal(bk)}
                 onRefreshBookings={loadData}
-                onOpenRepairPassport={(bk) => handleOpenRepairPassport(bk)}
+                onOpenReviewModal={handleOpenReview}
+                onOpenRepairPassport={handleOpenRepairPassport}
               />
             )}
           </>
         ) : (
-          activeWorker && (
+          (activeWorker || workers[0]) ? (
             <WorkerDashboard
-              worker={activeWorker}
+              worker={activeWorker || workers[0]}
               requests={requests}
               quotes={quotes}
               bookings={bookings}
               loading={loading}
               activeWorkerTab={activeWorkerTab}
               onSelectWorkerTab={setActiveWorkerTab}
-              onOpenSubmitQuote={(lead) => {
-                setSelectedLeadForQuote(lead);
+              onOpenSubmitQuote={(req: ServiceRequest) => {
+                setSelectedLeadForQuote(req);
                 setSubmitQuoteModalOpen(true);
               }}
-              onOpenCounteroffer={(q) => handleOpenCounteroffer(q, 'worker')}
+              onOpenCounteroffer={(q: Quote) => handleOpenCounteroffer(q, 'worker')}
               onRefreshData={loadData}
               allWorkers={workers}
-              onSelectWorker={setActiveWorker}
-              onOpenProposeChangeOrder={(b) => handleOpenProposeChangeOrder(b)}
-              onOpenRepairPassport={(b) => handleOpenRepairPassport(b)}
+              onSelectWorker={(w: Worker) => setActiveWorker(w)}
+              onOpenProposeChangeOrder={handleOpenChangeOrder}
+              onOpenRepairPassport={handleOpenRepairPassport}
             />
+          ) : (
+            <div className="py-20 text-center space-y-3">
+              <div className="w-8 h-8 border-3 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs text-slate-500 font-medium">Loading service provider workspace...</p>
+            </div>
           )
         )}
       </main>
@@ -377,25 +467,25 @@ export function App() {
       <footer className="bg-white border-t border-slate-200 mt-12 py-8 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800">SkillNear (PS03)</span>
+            <span className="font-bold text-slate-800">SkillNear</span>
             <span>•</span>
             <span>Hyperlocal Blue-Collar Services Platform</span>
           </div>
 
           <div className="text-center sm:text-right">
-            <span>Hackathon Prototype</span> •{' '}
+            <span>Local services. Clear agreements. Fair pricing.</span> •{' '}
             <button
               type="button"
               onClick={() => setSetupModalOpen(true)}
               className="text-brand-600 hover:text-brand-800 font-semibold underline underline-offset-2 cursor-pointer"
             >
-              Supabase PostgreSQL Docs & Migration
+              Database & Storage Setup
             </button>
           </div>
         </div>
       </footer>
 
-      {/* MODALS */}
+      {/* Interactive Global Modals */}
       <LocationModal
         isOpen={locationModalOpen}
         onClose={() => setLocationModalOpen(false)}
@@ -415,6 +505,15 @@ export function App() {
         onClose={() => setSetupModalOpen(false)}
         dbStatus={dbStatus}
         onRefreshConnection={handleRefreshConnection}
+        onResetDemo={handleResetDemoData}
+      />
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        initialTab={authModalInitialTab}
+        initialRole={currentRole}
       />
 
       <PostRequestModal

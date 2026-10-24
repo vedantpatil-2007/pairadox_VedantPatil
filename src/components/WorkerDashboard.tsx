@@ -13,6 +13,7 @@ import {
   FileCheck2,
   AlertTriangle,
   Lock,
+  Users,
 } from 'lucide-react';
 import { Worker, ServiceRequest, Quote, Booking } from '../types';
 import { calculateDistanceKm, formatDistance } from '../lib/geo';
@@ -278,6 +279,17 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
                         <span className="text-xs text-slate-500 capitalize">
                           Urgency: <strong>{lead.urgency}</strong>
                         </span>
+                        {lead.crew_size && lead.crew_size > 1 && (
+                          <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
+                            <Users className="w-3 h-3 text-indigo-600" />
+                            <span>Crew: {lead.crew_size} Techs</span>
+                          </span>
+                        )}
+                        {lead.organization_name && (
+                          <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                            {lead.organization_name}
+                          </span>
+                        )}
                       </div>
 
                       <h3 className="text-base font-bold text-slate-900">{lead.title}</h3>
@@ -485,6 +497,12 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
                       <span className="text-xs text-slate-400">
                         {new Date(b.scheduled_for).toLocaleDateString()}
                       </span>
+                      {b.crew_size && b.crew_size > 1 && (
+                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
+                          <Users className="w-3 h-3 text-indigo-600" />
+                          <span>Crew: {b.crew_size}</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-right">
@@ -504,6 +522,11 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
                     <p className="text-slate-500">
                       Client Contact: <strong>{b.customer_name}</strong> ({b.customer_phone})
                     </p>
+                    {b.supervisor_name && (
+                      <p className="text-indigo-700 font-medium text-[11px]">
+                        Supervisor Lead: <strong>{b.supervisor_name}</strong>
+                      </p>
+                    )}
                   </div>
 
                   {/* ScopeLock Specifications */}
@@ -549,6 +572,12 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
                                 </span>
                               </div>
                               <p className="text-slate-600 text-[11px]">{co.reason}</p>
+                              {co.crew_adjustment && (
+                                <p className="text-indigo-600 text-[10px] font-semibold">
+                                  Crew Adjustment: +{co.crew_adjustment.added_workers} worker(s)
+                                  {co.crew_adjustment.added_duration ? ` for ${co.crew_adjustment.added_duration} ${co.crew_adjustment.duration_unit || 'days'}` : ''}
+                                </p>
+                              )}
                             </div>
                             <div className="text-right shrink-0">
                               <span className="font-bold text-slate-900">+₹{co.additional_amount}</span>

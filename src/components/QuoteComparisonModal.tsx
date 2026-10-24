@@ -12,6 +12,7 @@ import {
   Star,
   MapPin,
   Lock,
+  Users,
 } from 'lucide-react';
 import { Quote, ServiceRequest } from '../types';
 import { ScopeCard } from './ScopeCard';
@@ -218,6 +219,37 @@ export const QuoteComparisonModal: React.FC<QuoteComparisonModalProps> = ({
                             </span>
                           )}
                         </div>
+
+                        {/* Crew Capacity Allocation & Shortfall Warning */}
+                        {request.crew_size && request.crew_size > 1 && (
+                          <div className="p-2.5 rounded-xl border border-sky-200 bg-sky-50/50 flex flex-col gap-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+                                <Users className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                <span>Crew Allocation:</span>
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-900">
+                                  {item.offered_crew_size || 1} of {request.crew_size} workers
+                                </span>
+                                {(item.offered_crew_size || 1) < request.crew_size ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                                    Capacity Shortfall: -{request.crew_size - (item.offered_crew_size || 1)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    Full Team Matched
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {item.supervisor_name && (
+                              <div className="text-[11px] text-slate-500">
+                                Supervisor: <strong className="text-slate-700">{item.supervisor_name}</strong>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Total Price Banner */}
                         <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
