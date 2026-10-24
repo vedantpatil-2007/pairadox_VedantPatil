@@ -7,6 +7,29 @@ SkillNear connects urban households with verified local blue-collar professional
 
 ---
 
+## 🔒 Defining USP: ScopeLock™ + FairDeal™
+> *"Clear scope. Comparable quotes. No unapproved changes."*
+
+SkillNear eliminates the #1 frustration in on-demand home services: uncommunicated scope creep, non-transparent quotes, and mid-job price surprises.
+
+1. **Phase 1 — ScopeLock™ (Structured Specifications)**:
+   - Customers define structured work specifications: Problem, Requested Tasks, Deliverables, Urgency, Budget, Assumptions, and explicit Exclusions.
+   - Auto-populated trade presets for Plumbing, Electrical, Cleaning, and Painting accelerate request creation.
+   - Rendered as unified **Scope Cards** across customer broadcasts, worker leads, and active bookings.
+2. **Phase 2 — FairDeal™ (Itemized Comparable Quotes)**:
+   - Technicians submit quotes with itemized breakdowns: **Labour**, **Materials (with item-by-item specs & brands)**, and **Travel Fee**.
+   - Total quote amount is cryptographically and mathematically verified to equal `Labour + Materials + Travel`.
+   - **Side-by-Side Quote Comparison**: Customers click *"Compare Quotes (FairDeal™)"* to inspect multiple bids on a unified ScopeLock baseline.
+3. **Phase 3 — Change-Order Lock™ (Price Invariant Enforcement)**:
+   - The agreed price is strictly locked upon initial booking confirmation (`original_agreed_price`).
+   - If a technician discovers unforeseen issues, they submit a formal Scope Change Order with title, reason, and revised total.
+   - **Customer Sign-Off Required**: The agreed price cannot change without customer approval. If rejected, the price remains locked at the baseline.
+4. **Phase 4 — Repair Passport™ (Digital Service Record)**:
+   - Completed bookings generate a structured digital service record with a unique passport ID.
+   - Includes agreed scope sign-off, financial audit trail (`Original Quote` + `Approved Change Orders` = `Final Agreed Total`), verified change-order history with no unapproved changes recorded, and explicitly recorded parts/warranty notes.
+
+---
+
 ## 🌟 Key Highlights & Architectural Features
 
 1. **Persistent PostgreSQL Database via Supabase**:
@@ -90,24 +113,63 @@ SkillNear works out-of-the-box in **Local Preview Mode** without any configurati
 ### Running Migrations on Supabase
 1. Log in to [supabase.com](https://supabase.com) and create or open your project.
 2. In the Supabase Dashboard, navigate to **SQL Editor** &rarr; **New Query**.
-3. Open and run the schema migration file:
-   - [`supabase/migrations/20261024000001_create_skillnear_schema.sql`](file:///supabase/migrations/20261024000001_create_skillnear_schema.sql)
-4. Open and run the repeatable seed data file:
+3. **If setting up a fresh database**:
+   - Open and run the initial schema migration: [`supabase/migrations/20261024000001_create_skillnear_schema.sql`](file:///supabase/migrations/20261024000001_create_skillnear_schema.sql)
+4. **If updating an existing database with the corrective security fix**:
+   - Open and run the corrective migration: [`supabase/migrations/20261024000002_secure_job_leads_view.sql`](file:///supabase/migrations/20261024000002_secure_job_leads_view.sql)
+5. Open and run the repeatable seed data file:
    - [`supabase/seed.sql`](file:///supabase/seed.sql)
-5. Alternatively, click the **"Preview Mode / Supabase Live"** pill in the top navigation bar inside the SkillNear web app to open the built-in SQL viewer and copy the entire migration with 1 click.
+6. Alternatively, click the **"Preview Mode / Supabase Live"** pill in the top navigation bar inside the SkillNear web app to toggle between Migration 1 and Migration 2 and copy the SQL with 1 click.
 
 ### Schema Overview
-| Table | Description |
-|---|---|
-| `workers` | Fictional demo technician profiles (name, trade, hourly rate, rating, coordinates, bio, demo flag) |
-| `services` | Upfront fixed offerings provided by workers with estimated duration and base prices |
-| `service_requests` | Customer job postings with description, urgency (`immediate`, `today`, `flexible`), and budget |
-| `quotes` | Technician price quotes and customer counteroffers (`pending`, `countered`, `accepted`, `rejected`) |
-| `bookings` | Confirmed appointments with agreed rate, customer address, and status progression |
-| `reviews` | Customer ratings (1-5 stars) and feedback comments on completed bookings |
+| Table / View | Type | Description | Access & Privacy Guard |
+|---|---|---|---|
+| `workers` | Table | Fictional demo technician profiles (trade, hourly rate, rating, coordinates, bio) | Public read-only for browsing. No anonymous modifications. |
+| `services` | Table | Upfront fixed offerings provided by workers with estimated duration and base prices | Public read-only for rate card discovery. |
+| `service_requests` | Table | Customer job postings with description, urgency, budget, coordinates | Ownership-restricted (`customer_id = auth.uid()`). Direct SELECT shields phone & full street address. |
+| `job_leads` | View | Hyperlocal job broadcast feed for technicians and discovery | **Security Barrier View**: Masks `customer_phone` to `NULL`, `customer_address` to general vicinity, `customer_name` to first name + initial, and coordinates to coarse ~1.1 km precision. |
+| `quotes` | Table | Technician price quotes and customer counteroffers (`pending`, `countered`, `accepted`, `rejected`) | Restricted to request owner (`customer_id`) and quoting worker (`creator_id`). |
+| `bookings` | Table | Confirmed appointments with agreed rate, customer contact, and status progression | Restricted to confirmed customer and assigned technician. Auto-populates verified contact details via database trigger upon confirmation. |
+| `reviews` | Table | Customer ratings (1-5 stars) and feedback comments on completed bookings | Public read-only for ratings; write allowed for verified completed bookings. |
 
-### Row Level Security (RLS)
-All six tables have Row Level Security enabled. For this milestone prototype, public policies grant the `anon` role select/insert/update capabilities using the publishable key. In a production build with authenticated accounts, policies would strictly enforce `auth.uid() = customer_id` or `auth.uid() = worker_id`.
+### Row Level Security (RLS) & Least-Privilege Architecture
+SkillNear implements a least-privilege security design combining Row Level Security (RLS) with Supabase Anonymous Authentication:
+1. **Public Job Feed Privacy Shield (`public.job_leads`)**:
+   - Uses `WITH (security_barrier = true, security_invoker = false)`: Definer execution ensures the view can read `service_requests` while strictly projecting only sanitized columns, and `security_barrier` prevents side-channel filter-pushdown attacks.
+   - **Phone Redaction**: `customer_phone` is strictly `NULL` for all non-owners (including demo rows where `customer_id IS NULL`).
+   - **Address Masking**: `customer_address` is masked to `'Hyperlocal Vicinity (Exact address provided upon confirmed booking)'` for all non-owners.
+   - **Name Anonymization**: `customer_name` is masked to first name + initial (e.g. `'Arjun M.'`).
+   - **Coordinate Obfuscation**: `customer_lat` and `customer_lng` are rounded to 2 decimal places (`round(..., 2)` &rarr; ~1.1 km neighborhood resolution), preventing exact residence tracking while preserving distance calculations.
+   - **Eligible Leads Only**: Filtered to `WHERE status IN ('open', 'quoted')` (or own requests).
+2. **Direct Table Protection (`public.service_requests`)**:
+   - Direct `SELECT` on `public.service_requests` is restricted by RLS strictly to the request owner (`auth.uid() = customer_id`) or an assigned technician of a confirmed booking.
+   - A request does **not** become readable merely because a booking exists for it. Caller's `auth.uid()` is verified against trusted customer ownership or the technician who authored the accepted quote.
+   - `OR customer_id IS NULL` is removed, so raw tables cannot be scraped.
+   - Cross-table policy recursion is avoided using a `SECURITY DEFINER STABLE` helper function `app_private.fn_is_booking_technician_or_participant` with explicit `SET search_path = ''` placed in an unexposed private schema (`app_private`).
+3. **Hardened Bookings Table Protection (`public.bookings`)**:
+   - The `bookings` table contains private customer contact information (`customer_phone`, `service_address`).
+   - Direct `SELECT`, `INSERT`, and `UPDATE` are strictly restricted to the customer owner (`auth.uid() = customer_id`) or the assigned technician whose accepted quote is tied to the booking.
+   - `OR customer_id IS NULL` is completely eliminated. Unrelated authenticated users and anonymous callers receive 0 rows.
+   - Technicians only receive customer phone and exact address **after booking confirmation**.
+   - A `SECURITY DEFINER` trigger `app_private.fn_sync_booking_customer_details` with `SET search_path = ''` in schema `app_private` automatically synchronizes verified contact info into `public.bookings` upon confirmation.
+4. **Private Schema Isolation & Least Privilege (`app_private`)**:
+   - Internal helper functions and trigger functions are isolated in `app_private` and completely unexposed to the Supabase Data API (PostgREST).
+   - `USAGE ON SCHEMA app_private` is granted strictly to `authenticated` (revoked from `PUBLIC` and `anon`).
+   - `app_private.fn_is_booking_technician_or_participant` is executable strictly by `authenticated`.
+   - `app_private.fn_sync_booking_customer_details` has direct execution revoked from `PUBLIC`, `anon`, and `authenticated` (fired solely by the Postgres trigger engine).
+5. **Demo Worker Workflow Simulation**:
+   - Fictional demo workers lack Supabase Auth accounts. Database RLS denies them access to raw private customer records.
+   - Their demo technician workflows remain safely simulated in client state until production authentication is provisioned.
+6. **Ownership-Based Access**:
+   - `service_requests`, `bookings`, and `reviews` track `customer_id UUID DEFAULT auth.uid()`.
+   - The frontend initializes a persistent Supabase Anonymous Session (`signInAnonymously()`), providing an unforgeable `auth.uid()`.
+7. **Explicit PostgREST Data API Grants**:
+   - For Supabase projects where automatic table exposure of new tables is disabled:
+     - `GRANT USAGE ON SCHEMA public TO anon, authenticated;`
+     - `SELECT` on `workers`, `services`, and `job_leads`
+     - `SELECT, INSERT, UPDATE` on `service_requests`, `quotes`, and `bookings`
+     - `SELECT, INSERT` on `reviews`
+     - `NOTIFY pgrst, 'reload schema';` to immediately refresh PostgREST schema cache.
 
 ---
 
@@ -117,8 +179,10 @@ All six tables have Row Level Security enabled. For this milestone prototype, pu
 ```bash
 npm test
 ```
-All **18 automated tests** pass across 4 test suites:
+All **36 automated tests** pass across 6 test suites:
 - `src/test/geo.test.ts`: Haversine spherical distance calculation, meter/km formatting, and coordinate matching (5 tests).
+- `src/test/supabase_config.test.ts`: Shared configuration detection and connection verification (2 tests).
+- `src/test/security_job_leads.test.ts`: Job lead privacy masking (NULL phone, masked address, anonymized name, coarse coordinates), distance calculation integrity, owner access, post-booking technician details access, unrelated authenticated user denial, booking contact shielding, demo worker simulation isolation, missing-column migration compatibility, legacy permissive policy purge, anonymous write blocking, cross-customer booking rejection, quote/request mismatch rejection, immutable field protection, and review authorization (16 tests).
 - `src/test/api.test.ts`: Worker querying, category filtering, job creation, quote submission, counteroffer negotiation, booking confirmation, and review submission (7 tests).
 - `src/test/components.test.tsx`: Component rendering, persona toggling, disclaimer banners, and button triggers (3 tests).
 - `src/test/responsive.test.tsx`: Viewport testing at `375x812` (mobile), `768x1024` (tablet), and `1440x900` (desktop) (3 tests).

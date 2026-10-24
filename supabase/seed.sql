@@ -267,14 +267,17 @@ INSERT INTO public.services (worker_id, category, name, description, base_price,
 
 -- ----------------------------------------------------------------------------
 -- 3. SEED INITIAL SERVICE REQUESTS (To demonstrate workflow immediately)
+-- Note: customer_id is NULL for demo records so all evaluators can inspect
+-- the full end-to-end negotiation workflow without requiring prior sign-in.
 -- ----------------------------------------------------------------------------
 INSERT INTO public.service_requests (
-  id, customer_name, customer_phone, customer_address, customer_lat, customer_lng,
+  id, customer_id, customer_name, customer_phone, customer_address, customer_lat, customer_lng,
   category, title, description, urgency, budget, preferred_worker_id, status, created_at
 ) VALUES
 -- Request 1: Quoted state ready for negotiation
 (
   '33333333-3333-3333-3333-333333333301',
+  NULL,
   'Arjun Mehta',
   '+91 98450 11223',
   'Flat 302, Palm Heights, 12th Main, Koramangala 4th Block',
@@ -292,6 +295,7 @@ INSERT INTO public.service_requests (
 -- Request 2: Open request awaiting quotes
 (
   '33333333-3333-3333-3333-333333333302',
+  NULL,
   'Kavita Sen',
   '+91 98451 99887',
   'Villa 14, Rainbow Colony, Indiranagar',
@@ -309,6 +313,7 @@ INSERT INTO public.service_requests (
 -- Request 3: Booked & completed request for review demo
 (
   '33333333-3333-3333-3333-333333333303',
+  NULL,
   'Rohan Gupta',
   '+91 98452 44556',
   'Tower 5, Salarpuria Green, HSR Sector 2',
@@ -328,7 +333,7 @@ INSERT INTO public.service_requests (
 -- 4. SEED QUOTES (Showing initial bid and active counteroffer workflow)
 -- ----------------------------------------------------------------------------
 INSERT INTO public.quotes (
-  id, request_id, worker_id, amount, estimated_duration, notes,
+  id, request_id, worker_id, creator_id, amount, estimated_duration, notes,
   status, counter_amount, counter_notes, last_updated_by, created_at, updated_at
 ) VALUES
 -- Quote 1: For Request 1 - Plumber Ramesh Kumar offered 550, Customer countered 480
@@ -336,6 +341,7 @@ INSERT INTO public.quotes (
   '44444444-4444-4444-4444-444444444401',
   '33333333-3333-3333-3333-333333333301',
   '11111111-1111-1111-1111-111111111103',
+  NULL,
   550.00,
   '1.5 hours',
   'Includes heavy-duty UPVC elbow replacement and silicone seal test.',
@@ -351,6 +357,7 @@ INSERT INTO public.quotes (
   '44444444-4444-4444-4444-444444444402',
   '33333333-3333-3333-3333-333333333301',
   '11111111-1111-1111-1111-111111111104',
+  NULL,
   500.00,
   '1 hour',
   'Available to reach within 40 minutes with PVC cutter and replacement pipe.',
@@ -366,6 +373,7 @@ INSERT INTO public.quotes (
   '44444444-4444-4444-4444-444444444403',
   '33333333-3333-3333-3333-333333333303',
   '11111111-1111-1111-1111-111111111105',
+  NULL,
   2400.00,
   '4 hours',
   'Full team of two cleaners with industrial vacuum and chemical disinfectant.',
@@ -381,7 +389,7 @@ INSERT INTO public.quotes (
 -- 5. SEED BOOKINGS
 -- ----------------------------------------------------------------------------
 INSERT INTO public.bookings (
-  id, request_id, worker_id, quote_id, customer_name, customer_phone,
+  id, request_id, worker_id, quote_id, customer_id, customer_name, customer_phone,
   service_address, agreed_price, scheduled_for, status, completion_notes, created_at, completed_at
 ) VALUES
 (
@@ -389,6 +397,7 @@ INSERT INTO public.bookings (
   '33333333-3333-3333-3333-333333333303',
   '11111111-1111-1111-1111-111111111105',
   '44444444-4444-4444-4444-444444444403',
+  NULL,
   'Rohan Gupta',
   '+91 98452 44556',
   'Tower 5, Salarpuria Green, HSR Sector 2',
@@ -404,14 +413,20 @@ INSERT INTO public.bookings (
 -- 6. SEED REVIEWS
 -- ----------------------------------------------------------------------------
 INSERT INTO public.reviews (
-  id, booking_id, worker_id, customer_name, rating, comment, created_at
+  id, booking_id, worker_id, customer_id, customer_name, rating, comment, created_at
 ) VALUES
 (
   '66666666-6666-6666-6666-666666666601',
   '55555555-5555-5555-5555-555555555501',
   '11111111-1111-1111-1111-111111111105',
+  NULL,
   'Rohan Gupta',
   5,
   'Exceptional deep cleaning service! Arrived right on schedule, spotless kitchen and bathrooms. Highly recommend Priya for move-in cleaning.',
   now() - interval '13 hours'
 );
+
+-- ----------------------------------------------------------------------------
+-- 7. REFRESH POSTGREST SCHEMA CACHE
+-- ----------------------------------------------------------------------------
+NOTIFY pgrst, 'reload schema';

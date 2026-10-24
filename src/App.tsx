@@ -13,12 +13,15 @@ import { CounterofferModal } from './components/CounterofferModal';
 import { ConfirmBookingModal } from './components/ConfirmBookingModal';
 import { ReviewModal } from './components/ReviewModal';
 import { SubmitQuoteModal } from './components/SubmitQuoteModal';
+import { QuoteComparisonModal } from './components/QuoteComparisonModal';
+import { ProposeChangeOrderModal } from './components/ProposeChangeOrderModal';
+import { RepairPassportModal } from './components/RepairPassportModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 
 import { Worker, ServiceRequest, Quote, Booking, UserLocation, Review } from './types';
 import { DEFAULT_LOCATION } from './lib/geo';
 import { api } from './services/api';
-import { isSupabaseConfigured, getSupabaseConfigStatus, verifySupabaseConnection, SupabaseConnectionResult } from './lib/supabase';
+import { isSupabaseConfigured, getSupabaseConfigStatus, verifySupabaseConnection, SupabaseConnectionResult, initAnonymousAuth } from './lib/supabase';
 
 export function App() {
   // Global Data State
@@ -66,6 +69,16 @@ export function App() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedBookingForReview, setSelectedBookingForReview] = useState<Booking | null>(null);
 
+  // ScopeLock & FairDeal Modals
+  const [quoteComparisonModalOpen, setQuoteComparisonModalOpen] = useState(false);
+  const [selectedRequestForComparison, setSelectedRequestForComparison] = useState<ServiceRequest | null>(null);
+
+  const [proposeChangeOrderModalOpen, setProposeChangeOrderModalOpen] = useState(false);
+  const [selectedBookingForChangeOrder, setSelectedBookingForChangeOrder] = useState<Booking | null>(null);
+
+  const [repairPassportModalOpen, setRepairPassportModalOpen] = useState(false);
+  const [selectedBookingForPassport, setSelectedBookingForPassport] = useState<Booking | null>(null);
+
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -90,6 +103,11 @@ export function App() {
       const connectionResult = await verifySupabaseConnection();
       setDbStatus(connectionResult);
       setIsLiveDatabase(connectionResult.isConnected);
+
+      // Initialize anonymous authentication session for ownership RLS policies
+      if (connectionResult.isConnected) {
+        await initAnonymousAuth();
+      }
 
       // 2. Load application data
       const [workersRes, requestsRes, quotesRes, bookingsRes] = await Promise.all([
@@ -221,6 +239,30 @@ export function App() {
     setActiveWorkerTab('worker-quotes');
   };
 
+  const handleOpenCompareQuotes = (request: ServiceRequest) => {
+    setSelectedRequestForComparison(request);
+    setQuoteComparisonModalOpen(true);
+  };
+
+  const handleOpenProposeChangeOrder = (booking: Booking) => {
+    setSelectedBookingForChangeOrder(booking);
+    setProposeChangeOrderModalOpen(true);
+  };
+
+  const handleChangeOrderProposed = (_updatedBooking: Booking) => {
+    addToast({
+      type: 'success',
+      title: 'Change Order Proffered (Locked)!',
+      description: 'Customer must explicitly approve the revised total before changes take effect.',
+    });
+    loadData();
+  };
+
+  const handleOpenRepairPassport = (booking: Booking) => {
+    setSelectedBookingForPassport(booking);
+    setRepairPassportModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       {/* Navigation Bar */}
@@ -292,6 +334,7 @@ export function App() {
                 onOpenNewRequest={() => handleOpenPostRequest(null)}
                 onOpenCounteroffer={(q) => handleOpenCounteroffer(q, 'customer')}
                 onOpenConfirmBooking={(q) => handleOpenConfirmBooking(q)}
+                onOpenCompareQuotes={(req) => handleOpenCompareQuotes(req)}
               />
             )}
 
@@ -301,6 +344,7 @@ export function App() {
                 loading={loading}
                 onOpenReviewModal={(bk) => handleOpenReviewModal(bk)}
                 onRefreshBookings={loadData}
+                onOpenRepairPassport={(bk) => handleOpenRepairPassport(bk)}
               />
             )}
           </>
@@ -322,6 +366,8 @@ export function App() {
               onRefreshData={loadData}
               allWorkers={workers}
               onSelectWorker={setActiveWorker}
+              onOpenProposeChangeOrder={(b) => handleOpenProposeChangeOrder(b)}
+              onOpenRepairPassport={(b) => handleOpenRepairPassport(b)}
             />
           )
         )}
@@ -432,6 +478,44 @@ export function App() {
           setSelectedBookingForReview(null);
         }}
         onReviewSubmitted={handleReviewSubmitted}
+      />
+
+      {/* ScopeLock & FairDeal Modals */}
+      <QuoteComparisonModal
+        request={selectedRequestForComparison}
+        quotes={quotes}
+        isOpen={quoteComparisonModalOpen}
+        onClose={() => {
+          setQuoteComparisonModalOpen(false);
+          setSelectedRequestForComparison(null);
+        }}
+        onAcceptQuote={(quote) => {
+          setQuoteComparisonModalOpen(false);
+          handleOpenConfirmBooking(quote);
+        }}
+        onCounteroffer={(quote) => {
+          setQuoteComparisonModalOpen(false);
+          handleOpenCounteroffer(quote, 'customer');
+        }}
+      />
+
+      <ProposeChangeOrderModal
+        booking={selectedBookingForChangeOrder}
+        isOpen={proposeChangeOrderModalOpen}
+        onClose={() => {
+          setProposeChangeOrderModalOpen(false);
+          setSelectedBookingForChangeOrder(null);
+        }}
+        onSuccess={handleChangeOrderProposed}
+      />
+
+      <RepairPassportModal
+        booking={selectedBookingForPassport}
+        isOpen={repairPassportModalOpen}
+        onClose={() => {
+          setRepairPassportModalOpen(false);
+          setSelectedBookingForPassport(null);
+        }}
       />
 
       {/* Floating Notifications */}

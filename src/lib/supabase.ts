@@ -71,8 +71,8 @@ if (config.isConfigured && supabaseUrl && supabaseKey) {
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseKey, {
       auth: {
-        persistSession: false,
-        autoRefreshToken: false,
+        persistSession: typeof window !== 'undefined',
+        autoRefreshToken: typeof window !== 'undefined',
       },
     });
   } catch (err) {
@@ -83,6 +83,35 @@ if (config.isConfigured && supabaseUrl && supabaseKey) {
 
 export const supabase = supabaseInstance;
 export const isSupabaseConfigured = () => Boolean(supabaseInstance && config.isConfigured);
+
+/**
+ * Initializes a Supabase Anonymous Authentication session if supported and needed.
+ * Returns the active user ID (UUID) or null.
+ * Provides a real auth.uid() for ownership-based RLS policies without requiring
+ * email/password sign-in.
+ */
+export async function initAnonymousAuth(): Promise<string | null> {
+  if (!supabaseInstance || !config.isConfigured) return null;
+
+  try {
+    const { data: sessionData, error: sessionErr } = await supabaseInstance.auth.getSession();
+    if (!sessionErr && sessionData?.session?.user?.id) {
+      return sessionData.session.user.id;
+    }
+
+    const { data: authData, error: authErr } = await supabaseInstance.auth.signInAnonymously();
+    if (authErr) {
+      // If anonymous auth is not enabled in Supabase Dashboard, log a warning and proceed
+      console.warn('Supabase anonymous sign-in could not be completed:', authErr.message);
+      return null;
+    }
+
+    return authData.user?.id || null;
+  } catch (err) {
+    console.warn('Anonymous auth initialization warning:', err);
+    return null;
+  }
+}
 
 /**
  * Verifies whether the Supabase database connection actually works by executing

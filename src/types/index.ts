@@ -42,10 +42,29 @@ export interface Service {
   created_at?: string;
 }
 
+// ============================================================================
+// SCOPELOCK™ DATA MODEL (Phase 1)
+// "Clear scope. No unapproved changes."
+// ============================================================================
+export interface ScopeLock {
+  problem_description: string;
+  problem?: string; // Alias
+  requested_work: string[];
+  expected_deliverables: string[];
+  deliverables?: string[]; // Alias
+  assumptions?: string[];
+  exclusions?: string[];
+  urgency: Urgency;
+  budget?: number;
+  property_type?: string;
+  is_locked: boolean;
+}
+
 export interface ServiceRequest {
   id: string;
+  customer_id?: string | null;
   customer_name: string;
-  customer_phone: string;
+  customer_phone?: string | null;
   customer_address: string;
   customer_lat: number;
   customer_lng: number;
@@ -56,14 +75,42 @@ export interface ServiceRequest {
   budget?: number;
   preferred_worker_id?: string | null;
   status: RequestStatus;
+  scope?: ScopeLock; // Structured ScopeLock baseline
   created_at: string;
   updated_at: string;
+}
+
+// ============================================================================
+// FAIRDEAL™ QUOTE ITEMIZATION MODEL (Phase 2)
+// "Itemized labour, materials, travel. Transparent comparison."
+// ============================================================================
+export interface QuoteItemization {
+  labour_charge: number;
+  materials_charge: number;
+  travel_fee: number;
+  total_price: number; // validated = labour_charge + materials_charge + travel_fee
+  included_work: string[];
+  exclusions: string[];
+  materials_breakdown?: {
+    name?: string;
+    item?: string;
+    cost: number;
+    brand_or_spec?: string;
+  }[];
+  parts_policy?: string;
+  // Aliases for compatibility
+  labour_amount?: number;
+  materials_amount?: number;
+  travel_amount?: number;
+  estimated_duration?: string;
+  included_tasks?: string[];
 }
 
 export interface Quote {
   id: string;
   request_id: string;
   worker_id: string;
+  creator_id?: string | null;
   amount: number;
   estimated_duration: string;
   notes?: string;
@@ -71,6 +118,7 @@ export interface Quote {
   counter_amount?: number | null;
   counter_notes?: string | null;
   last_updated_by: 'worker' | 'customer';
+  itemization?: QuoteItemization; // FairDeal itemization
   created_at: string;
   updated_at: string;
   // Joins
@@ -78,18 +126,70 @@ export interface Quote {
   request?: ServiceRequest;
 }
 
+// ============================================================================
+// CHANGE-ORDER LOCK MODEL (Phase 3)
+// "Preserves original agreed price. Explicit customer approval required."
+// ============================================================================
+export type ChangeOrderStatus = 'pending_customer_approval' | 'approved' | 'rejected';
+
+export interface ChangeOrder {
+  id: string;
+  booking_id: string;
+  title: string;
+  reason: string;
+  original_price: number;
+  additional_amount: number;
+  revised_total: number; // original_price + additional_amount
+  status: ChangeOrderStatus;
+  created_at: string;
+  responded_at?: string | null;
+  customer_notes?: string | null;
+}
+
+// ============================================================================
+// REPAIR PASSPORT™ MODEL (Phase 4)
+// "Certified service history with agreed scope, approved changes, & warranty."
+// ============================================================================
+export interface RepairPassport {
+  passport_id: string;
+  booking_id: string;
+  completed_at: string;
+  original_scope: ScopeLock;
+  original_agreed_price: number;
+  approved_changes: ChangeOrder[];
+  final_total_paid: number;
+  parts_recorded?: { name: string; brand?: string; warranty_months?: number }[];
+  warranty_notes?: string;
+  technician_name: string;
+  technician_trade: Trade;
+  is_demo_simulation: boolean;
+  // Conveniences & Aliases
+  agreed_scope?: ScopeLock;
+  original_quote?: number;
+  final_total?: number;
+  final_agreed_total?: number;
+  parts_installed?: { name: string; brand?: string; warranty_months?: number }[];
+  warranty_coverage?: string;
+  unapproved_changes_count?: number;
+  approved_change_orders?: { title: string; amount: number }[];
+}
+
 export interface Booking {
   id: string;
   request_id: string;
   worker_id: string;
   quote_id: string;
+  customer_id?: string | null;
   customer_name: string;
   customer_phone: string;
   service_address: string;
   agreed_price: number;
+  original_agreed_price?: number;
   scheduled_for: string;
   status: BookingStatus;
   completion_notes?: string | null;
+  change_orders?: ChangeOrder[];
+  passport?: RepairPassport;
   created_at: string;
   completed_at?: string | null;
   // Joins
@@ -101,6 +201,7 @@ export interface Review {
   id: string;
   booking_id: string;
   worker_id: string;
+  customer_id?: string | null;
   customer_name: string;
   rating: number;
   comment?: string;

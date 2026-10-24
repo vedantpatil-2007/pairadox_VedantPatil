@@ -8,10 +8,16 @@ import {
   FileText,
   Calendar,
   Briefcase,
+  ShieldCheck,
+  FilePlus2,
+  FileCheck2,
+  AlertTriangle,
+  Lock,
 } from 'lucide-react';
 import { Worker, ServiceRequest, Quote, Booking } from '../types';
 import { calculateDistanceKm, formatDistance } from '../lib/geo';
 import { getTradeBadge } from './WorkerCard';
+import { ScopeCard } from './ScopeCard';
 import { api } from '../services/api';
 
 interface WorkerDashboardProps {
@@ -27,6 +33,8 @@ interface WorkerDashboardProps {
   onRefreshData: () => void;
   allWorkers: Worker[];
   onSelectWorker: (worker: Worker) => void;
+  onOpenProposeChangeOrder?: (booking: Booking) => void;
+  onOpenRepairPassport?: (booking: Booking) => void;
 }
 
 export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
@@ -42,6 +50,8 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
   onRefreshData,
   allWorkers,
   onSelectWorker,
+  onOpenProposeChangeOrder,
+  onOpenRepairPassport,
 }) => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -275,6 +285,12 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
                         {lead.description}
                       </p>
 
+                      {lead.scope && (
+                        <div className="pt-1 max-w-xl">
+                          <ScopeCard scope={lead.scope} compact defaultExpanded={false} />
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-3 text-xs text-slate-500 pt-1">
                         <span>Customer: <strong className="text-slate-700">{lead.customer_name}</strong></span>
                         <span>•</span>
@@ -490,8 +506,85 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
                     </p>
                   </div>
 
-                  {/* Worker status update triggers */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                  {/* ScopeLock Specifications */}
+                  {b.request?.scope && (
+                    <div className="pt-1">
+                      <ScopeCard scope={b.request.scope} compact defaultExpanded={false} />
+                    </div>
+                  )}
+
+                  {/* Change Orders Section */}
+                  {b.change_orders && b.change_orders.length > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-800">
+                        <span className="flex items-center gap-1.5 text-slate-700">
+                          <Lock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Scope Change Orders ({b.change_orders.length})</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-normal">
+                          Requires Customer Approval
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {b.change_orders.map((co) => (
+                          <div
+                            key={co.id}
+                            className="bg-white border border-slate-200 rounded-lg p-2.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-slate-900">{co.title}</span>
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    co.status === 'approved'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : co.status === 'rejected'
+                                      ? 'bg-rose-100 text-rose-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {co.status === 'pending_customer_approval'
+                                    ? 'Awaiting Approval'
+                                    : co.status.toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-slate-600 text-[11px]">{co.reason}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="font-bold text-slate-900">+₹{co.additional_amount}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Worker status update & USP triggers */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
+                    {b.status !== 'completed' && b.status !== 'cancelled' && onOpenProposeChangeOrder && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenProposeChangeOrder(b)}
+                        className="px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Propose an out-of-scope task or price adjustment requiring customer sign-off"
+                      >
+                        <FilePlus2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>+ Propose Scope Change</span>
+                      </button>
+                    )}
+
+                    {b.status === 'completed' && onOpenRepairPassport && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenRepairPassport(b)}
+                        className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                        title="View certified digital service passport with immutable scope and audit history"
+                      >
+                        <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Repair Passport™</span>
+                      </button>
+                    )}
+
                     {b.status === 'confirmed' && (
                       <button
                         type="button"

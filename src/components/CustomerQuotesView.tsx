@@ -5,9 +5,15 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   Send,
+  Scale,
+  Lock,
+  Layers,
+  Wrench,
+  Package,
 } from 'lucide-react';
 import { ServiceRequest, Quote } from '../types';
 import { getTradeBadge } from './WorkerCard';
+import { ScopeCard } from './ScopeCard';
 
 interface CustomerQuotesViewProps {
   requests: ServiceRequest[];
@@ -16,6 +22,7 @@ interface CustomerQuotesViewProps {
   onOpenNewRequest: () => void;
   onOpenCounteroffer: (quote: Quote) => void;
   onOpenConfirmBooking: (quote: Quote) => void;
+  onOpenCompareQuotes?: (request: ServiceRequest) => void;
 }
 
 export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
@@ -25,6 +32,7 @@ export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
   onOpenNewRequest,
   onOpenCounteroffer,
   onOpenConfirmBooking,
+  onOpenCompareQuotes,
 }) => {
   if (loading) {
     return (
@@ -120,6 +128,20 @@ export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
                   <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
                     {req.description}
                   </p>
+
+                  {/* ScopeLock Baseline Preview */}
+                  {req.scope && (
+                    <div className="pt-2">
+                      <ScopeCard
+                        scope={req.scope}
+                        category={req.category}
+                        urgency={req.urgency}
+                        budget={req.budget}
+                        compact={true}
+                        defaultExpanded={false}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex sm:flex-col items-start sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 text-xs shrink-0">
@@ -132,25 +154,49 @@ export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
                   <div className="text-slate-400 text-[11px]">
                     Urgency: <span className="capitalize text-slate-700 font-medium">{req.urgency}</span>
                   </div>
+                  {onOpenCompareQuotes && reqQuotes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCompareQuotes(req)}
+                      className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <Scale className="w-3.5 h-3.5 text-indigo-700" />
+                      <span>Compare Quotes ({reqQuotes.length})</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Quotes List under this Request */}
               <div className="p-4 sm:p-5 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                  <span>Received Worker Quotes ({reqQuotes.length})</span>
-                  {reqQuotes.length === 0 && (
-                    <span className="text-[11px] font-normal text-amber-600">
-                      Awaiting technician response in your area...
-                    </span>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                    <span>Received Worker Quotes ({reqQuotes.length})</span>
+                    {reqQuotes.length === 0 && (
+                      <span className="text-[11px] font-normal text-amber-600">
+                        Awaiting technician response in your area...
+                      </span>
+                    )}
+                  </h4>
+
+                  {onOpenCompareQuotes && reqQuotes.length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCompareQuotes(req)}
+                      className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Scale className="w-3.5 h-3.5" />
+                      <span>FairDeal™ Side-by-Side View</span>
+                    </button>
                   )}
-                </h4>
+                </div>
 
                 {reqQuotes.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3">
                     {reqQuotes.map((q) => {
                       const isNegotiated = Boolean(q.counter_amount);
                       const finalAmount = q.counter_amount || q.amount;
+                      const item = q.itemization;
 
                       return (
                         <div
@@ -191,8 +237,28 @@ export const CustomerQuotesView: React.FC<CustomerQuotesViewProps> = ({
                                     Est. {q.estimated_duration}
                                   </span>
                                 </div>
+
+                                {/* FairDeal Itemized Chips */}
+                                {item && (
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap text-[11px]">
+                                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                                      <Wrench className="w-3 h-3 text-slate-500" />
+                                      <span>Labour: ₹{item.labour_charge}</span>
+                                    </span>
+                                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                                      <Package className="w-3 h-3 text-slate-500" />
+                                      <span>Parts: ₹{item.materials_charge}</span>
+                                    </span>
+                                    {item.travel_fee > 0 && (
+                                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                                        Travel: ₹{item.travel_fee}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
                                 {q.notes && (
-                                  <p className="text-xs text-slate-600 mt-1 italic">
+                                  <p className="text-xs text-slate-600 mt-1.5 italic">
                                     &ldquo;{q.notes}&rdquo;
                                   </p>
                                 )}
