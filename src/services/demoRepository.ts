@@ -250,6 +250,7 @@ class DemoRepository {
     const q = data.quotes.find((quote) => quote.id === booking.quote_id);
     if (q) {
       q.status = 'accepted';
+      q.accepted_amount = booking.agreed_price;
       q.updated_at = new Date().toISOString();
     }
     // Mark request as booked

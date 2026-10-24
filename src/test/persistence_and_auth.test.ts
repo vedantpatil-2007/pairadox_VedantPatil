@@ -176,8 +176,18 @@ describe('Phase 1 — Data Persistence, Review Math & Authentication Suite', () 
       if (health.isReachable && !health.operationsVerified) {
         expect(health.mode).toBe('connected_simulation');
         expect(health.label).toContain('Connected (Simulated Writes)');
+        expect(health.error).toBeTruthy();
       }
-    });
+    }, 30000);
+
+    it('returns workers and reviews gracefully even when views are pending on remote database', async () => {
+      const workersRes = await api.getWorkers();
+      expect(workersRes.data.length).toBeGreaterThan(0);
+      expect(workersRes.data[0]).toHaveProperty('trade');
+
+      const reviewsRes = await api.getReviews();
+      expect(Array.isArray(reviewsRes.data)).toBe(true);
+    }, 30000);
   });
 
   describe('4. Authentication & Session Management', () => {

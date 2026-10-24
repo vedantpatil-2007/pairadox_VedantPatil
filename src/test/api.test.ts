@@ -5,13 +5,19 @@ describe('SkillNear API Service & Workflow Engine', () => {
   it('retrieves demo workers covering all required trades', async () => {
     const res = await api.getWorkers();
     expect(res.data).toBeDefined();
-    expect(res.data.length).toBeGreaterThanOrEqual(8);
+    expect(res.data.length).toBeGreaterThanOrEqual(20);
 
     const trades = res.data.map((w) => w.trade);
     expect(trades).toContain('electrician');
     expect(trades).toContain('plumber');
     expect(trades).toContain('cleaner');
     expect(trades).toContain('painter');
+    expect(trades).toContain('ac_repair');
+    expect(trades).toContain('appliance_repair');
+    expect(trades).toContain('carpenter');
+    expect(trades).toContain('handyman');
+    expect(trades).toContain('water_purifier');
+    expect(trades).toContain('pest_control');
 
     // All demo workers have clearly labelled demo flags
     expect(res.data.every((w) => w.is_demo === true)).toBe(true);
@@ -25,6 +31,14 @@ describe('SkillNear API Service & Workflow Engine', () => {
     const plumbersRes = await api.getWorkers('plumber');
     expect(plumbersRes.data.length).toBeGreaterThanOrEqual(2);
     expect(plumbersRes.data.every((w) => w.trade === 'plumber')).toBe(true);
+
+    const acRes = await api.getWorkers('ac_repair');
+    expect(acRes.data.length).toBeGreaterThanOrEqual(2);
+    expect(acRes.data.every((w) => w.trade === 'ac_repair')).toBe(true);
+
+    const pestRes = await api.getWorkers('pest_control');
+    expect(pestRes.data.length).toBeGreaterThanOrEqual(2);
+    expect(pestRes.data.every((w) => w.trade === 'pest_control')).toBe(true);
   });
 
   it('creates a service request and appends to feed', async () => {

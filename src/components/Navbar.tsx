@@ -34,6 +34,7 @@ export interface NavbarProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
   onOpenNewRequest: () => void;
+  onOpenAIModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -53,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onSelectTab,
   onOpenNewRequest,
+  onOpenAIModal,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -203,6 +205,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ))}
                 </select>
               </div>
+            )}
+
+            {/* SkillNear AI Concierge Button */}
+            {onOpenAIModal && (
+              <button
+                type="button"
+                onClick={onOpenAIModal}
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 text-xs font-semibold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-colors cursor-pointer"
+                title="Open SkillNear AI Concierge"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                <span>AI Concierge</span>
+              </button>
             )}
 
             {/* Customer Post Job Button - ALWAYS VISIBLE in Customer Mode */}
@@ -446,6 +461,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Bookings
                 </button>
               </div>
+            )}
+
+            {/* Mobile AI Concierge Action */}
+            {onOpenAIModal && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAIModal();
+                }}
+                className="w-full py-2.5 px-4 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold rounded-xl border border-sky-200 shadow-2xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-sky-600" />
+                <span>Ask SkillNear AI</span>
+              </button>
             )}
 
             {/* Mobile Post Job Action */}

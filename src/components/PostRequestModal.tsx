@@ -18,47 +18,37 @@ import {
   Users,
 } from 'lucide-react';
 import { Trade, Urgency, UserLocation, Worker, ScopeLock } from '../types';
+import { DraftServiceRequest } from '../services/ai/types';
 import { api } from '../services/api';
+import { SERVICE_CATEGORIES, getCategoryById } from '../data/categories';
 
 interface PostRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentLocation: UserLocation;
   preselectedWorker: Worker | null;
+  initialDraft?: Partial<DraftServiceRequest> | null;
   onRequestCreated: (requestId: string) => void;
 }
 
 const DEFAULT_PRESETS: Record<
   Trade,
   { tasks: string[]; deliverables: string[]; exclusions: string[] }
-> = {
-  electrician: {
-    tasks: ['Isolate circuit & check line voltage', 'Inspect switchboard/MCB wiring', 'Repair/replace faulty components', 'Live load test'],
-    deliverables: ['Continuous flicker-free operation', 'Zero phase-neutral leakage', 'Faceplate mounted flush'],
-    exclusions: ['Internal wall re-conduit cabling', 'Appliance motor rewinding'],
-  },
-  plumber: {
-    tasks: ['Locate exact pipe/joint leak', 'Dismantle faulty fitting & clean threads', 'Install heavy-duty UPVC/brass fitting', 'Full drainage pressure test'],
-    deliverables: ['Zero water dripping under running pressure', 'Cupboard/floor wiped dry', 'Work area cleaned'],
-    exclusions: ['Granite counter breaking', 'Civil wall masonry tiling'],
-  },
-  cleaner: {
-    tasks: ['Deep scrubbing of kitchen/bathrooms', 'Floor machine buffing & vacuuming', 'Window track and balcony cleaning', 'Hospital-grade sanitization'],
-    deliverables: ['Grout free of stains/lime scale', 'Streak-free glass & mirrors', 'Fresh disinfectant aroma'],
-    exclusions: ['External high-rise window facade', 'Internal appliance coil repair'],
-  },
-  painter: {
-    tasks: ['Surface scraping & sanding', 'Wall putty application & primer coat', 'Two finish coats premium washable paint', 'Floor masking & cleanup'],
-    deliverables: ['Even paint texture with zero roller marks', 'Clean switchboard edges', 'Zero paint splatter on tiles'],
-    exclusions: ['Ceiling structural plaster repairs', 'Exterior weatherproofing scaffolding'],
-  },
-};
+> = SERVICE_CATEGORIES.reduce((acc, cat) => {
+  acc[cat.id] = {
+    tasks: cat.tasks,
+    deliverables: cat.deliverables,
+    exclusions: cat.exclusions,
+  };
+  return acc;
+}, {} as Record<Trade, { tasks: string[]; deliverables: string[]; exclusions: string[] }>);
 
 export const PostRequestModal: React.FC<PostRequestModalProps> = ({
   isOpen,
   onClose,
   currentLocation,
   preselectedWorker,
+  initialDraft,
   onRequestCreated,
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -107,11 +97,45 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
     }
   }, [preselectedWorker]);
 
+  useEffect(() => {
+    if (isOpen && initialDraft) {
+      if (initialDraft.category) {
+        setCategory(initialDraft.category);
+        const meta = getCategoryById(initialDraft.category);
+        if (meta) {
+          setTasks(meta.tasks);
+          setDeliverables(meta.deliverables);
+          setExclusions(meta.exclusions);
+        }
+      }
+      if (initialDraft.title) setTitle(initialDraft.title);
+      if (initialDraft.description) setDescription(initialDraft.description);
+      if (initialDraft.budget !== undefined) setBudget(String(initialDraft.budget));
+      if (initialDraft.urgency) setUrgency(initialDraft.urgency);
+      if (initialDraft.crew_size) setCrewSize(initialDraft.crew_size);
+      if (initialDraft.organization_name) setOrganizationName(initialDraft.organization_name);
+      if (initialDraft.duration_value) setDurationValue(initialDraft.duration_value);
+      if (initialDraft.duration_unit) setDurationUnit(initialDraft.duration_unit);
+      if (initialDraft.scope) {
+        if (initialDraft.scope.tasks?.length) setTasks(initialDraft.scope.tasks);
+        if (initialDraft.scope.deliverables?.length) setDeliverables(initialDraft.scope.deliverables);
+        if (initialDraft.scope.exclusions?.length) setExclusions(initialDraft.scope.exclusions);
+      }
+    }
+  }, [isOpen, initialDraft]);
+
   const handleCategoryChange = (cat: Trade) => {
     setCategory(cat);
-    setTasks(DEFAULT_PRESETS[cat].tasks);
-    setDeliverables(DEFAULT_PRESETS[cat].deliverables);
-    setExclusions(DEFAULT_PRESETS[cat].exclusions);
+    const meta = getCategoryById(cat);
+    if (meta) {
+      setTasks(meta.tasks);
+      setDeliverables(meta.deliverables);
+      setExclusions(meta.exclusions);
+      if (meta.isTeamBased && crewSize === 1) {
+        setCrewSize(meta.suggestedCrewSize);
+      }
+      setBudget(String(meta.defaultHourlyRate * (durationValue || 2)));
+    }
   };
 
   useEffect(() => {
@@ -303,6 +327,15 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {initialDraft && (
+              <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 font-medium">
+                <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>
+                  Pre-filled from your SkillNear AI consultation. Please review all fields and specifications before submitting.
+                </span>
+              </div>
+            )}
+
             {errorMsg && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 text-rose-800 text-xs border border-rose-200">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -313,29 +346,24 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
             {/* Category selection */}
             {!preselectedWorker && (
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Service Category</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { id: 'electrician', label: 'Electrician', icon: Zap },
-                    { id: 'plumber', label: 'Plumber', icon: Droplet },
-                    { id: 'cleaner', label: 'Cleaner', icon: Sparkles },
-                    { id: 'painter', label: 'Painter', icon: Paintbrush },
-                  ].map((cat) => {
+                <label className="text-xs font-semibold text-slate-700">Service Category (10 Core Trades)</label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {SERVICE_CATEGORIES.map((cat) => {
                     const Icon = cat.icon;
                     const isSelected = category === cat.id;
                     return (
                       <button
                         key={cat.id}
                         type="button"
-                        onClick={() => handleCategoryChange(cat.id as Trade)}
-                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                        onClick={() => handleCategoryChange(cat.id)}
+                        className={`flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer text-center ${
                           isSelected
-                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-500/20'
-                            : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-500/20 shadow-xs'
+                            : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
                         <Icon className="w-4 h-4 mb-1" />
-                        <span>{cat.label}</span>
+                        <span className="line-clamp-1 leading-tight text-[11px]">{cat.shortLabel}</span>
                       </button>
                     );
                   })}

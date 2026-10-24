@@ -17,6 +17,7 @@ import {
 import { api } from '../services/api';
 import { AuthUser } from '../lib/supabase';
 import { Trade } from '../types';
+import { SERVICE_CATEGORIES } from '../data/categories';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -500,10 +501,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         onChange={(e) => setTrade(e.target.value as Trade)}
                         className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-3 py-2.5 text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-brand-500 cursor-pointer"
                       >
-                        <option value="electrician">Electrician</option>
-                        <option value="plumber">Plumber</option>
-                        <option value="cleaner">Cleaner</option>
-                        <option value="painter">Painter</option>
+                        {SERVICE_CATEGORIES.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>

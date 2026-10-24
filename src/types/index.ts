@@ -1,4 +1,14 @@
-export type Trade = 'electrician' | 'plumber' | 'cleaner' | 'painter';
+export type Trade =
+  | 'electrician'
+  | 'plumber'
+  | 'cleaner'
+  | 'painter'
+  | 'ac_repair'
+  | 'appliance_repair'
+  | 'carpenter'
+  | 'handyman'
+  | 'water_purifier'
+  | 'pest_control';
 
 export type Urgency = 'immediate' | 'today' | 'flexible';
 
@@ -10,8 +20,11 @@ export type BookingStatus = 'confirmed' | 'in_progress' | 'completed' | 'cancell
 
 export interface Worker {
   id: string;
+  user_id?: string | null;
   name: string;
   trade: Trade;
+  secondary_trades?: Trade[];
+  skills?: string[];
   avatar_url?: string;
   phone: string;
   email: string;
@@ -128,6 +141,7 @@ export interface Quote {
   notes?: string;
   status: QuoteStatus;
   counter_amount?: number | null;
+  accepted_amount?: number | null;
   counter_notes?: string | null;
   last_updated_by: 'worker' | 'customer';
   itemization?: QuoteItemization; // FairDeal itemization

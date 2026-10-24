@@ -1,0 +1,32 @@
+# ==============================================================================
+# SkillNear (PS03) — Render Web Service Blueprint Specification
+# ==============================================================================
+# Architecture:
+# - Frontend: Built React + Vite SPA assets served from dist/
+# - Backend: Native Node.js production server (server/productionServer.js)
+# - Unified Origin: API (/api/ai-concierge) & Frontend on single domain (no CORS)
+# - AI: Google Gemini 3.8 Flash (Server-Side Only, Zero Client Leakage)
+# - Database: Supabase PostgreSQL with RLS and resilient 3-tier fallback
+# ==============================================================================
+
+services:
+  - type: web
+    name: skillnear
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/ai-concierge/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Frontend build-time environment variables (embedded in dist/ by Vite)
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      # Server-side runtime environment variables (strictly server-only)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash

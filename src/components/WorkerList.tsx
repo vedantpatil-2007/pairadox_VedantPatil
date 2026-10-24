@@ -3,18 +3,17 @@ import {
   Search,
   Filter,
   ArrowUpDown,
-  Zap,
-  Droplet,
   Sparkles,
-  Paintbrush,
   MapPin,
   AlertCircle,
   RefreshCw,
   ShieldCheck,
+  Users,
 } from 'lucide-react';
 import { Worker, Trade, UserLocation } from '../types';
 import { WorkerCard } from './WorkerCard';
 import { calculateDistanceKm } from '../lib/geo';
+import { SERVICE_CATEGORIES, getCategoryById } from '../data/categories';
 
 interface WorkerListProps {
   workers: Worker[];
@@ -63,9 +62,11 @@ export const WorkerList: React.FC<WorkerListProps> = ({
   const filteredAndSortedWorkers = useMemo(() => {
     let result = enrichedWorkers;
 
-    // Filter by trade
+    // Filter by trade (supporting primary trade and secondary capabilities)
     if (selectedTrade !== 'all') {
-      result = result.filter((w) => w.trade === selectedTrade);
+      result = result.filter(
+        (w) => w.trade === selectedTrade || (w.secondary_trades && w.secondary_trades.includes(selectedTrade))
+      );
     }
 
     // Filter by search query
@@ -76,7 +77,8 @@ export const WorkerList: React.FC<WorkerListProps> = ({
           w.name.toLowerCase().includes(q) ||
           w.trade.toLowerCase().includes(q) ||
           w.address.toLowerCase().includes(q) ||
-          (w.bio && w.bio.toLowerCase().includes(q))
+          (w.bio && w.bio.toLowerCase().includes(q)) ||
+          (w.skills && w.skills.some((s) => s.toLowerCase().includes(q)))
       );
     }
 
@@ -99,13 +101,22 @@ export const WorkerList: React.FC<WorkerListProps> = ({
     return result;
   }, [enrichedWorkers, selectedTrade, searchQuery, sortBy]);
 
-  const categories = [
-    { id: 'all', label: 'All Services', icon: Sparkles },
-    { id: 'electrician', label: 'Electricians', icon: Zap },
-    { id: 'plumber', label: 'Plumbers', icon: Droplet },
-    { id: 'cleaner', label: 'Cleaners', icon: Sparkles },
-    { id: 'painter', label: 'Painters', icon: Paintbrush },
-  ];
+  // Dynamic 10-category list with matching provider counts
+  const categoryPills = useMemo(() => {
+    return [
+      { id: 'all' as const, label: 'All Services', icon: Sparkles, count: enrichedWorkers.length },
+      ...SERVICE_CATEGORIES.map((cat) => ({
+        id: cat.id,
+        label: cat.pluralLabel,
+        icon: cat.icon,
+        count: enrichedWorkers.filter(
+          (w) => w.trade === cat.id || (w.secondary_trades && w.secondary_trades.includes(cat.id))
+        ).length,
+      })),
+    ];
+  }, [enrichedWorkers]);
+
+  const activeCategoryMeta = selectedTrade !== 'all' ? getCategoryById(selectedTrade) : null;
 
   return (
     <div className="space-y-6">
@@ -146,9 +157,9 @@ export const WorkerList: React.FC<WorkerListProps> = ({
         </div>
       </div>
 
-      {/* 2. CATEGORY PILLS FILTER BAR */}
+      {/* 2. CATEGORY PILLS FILTER BAR (10 Core Hyperlocal Categories) */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-        {categories.map((cat) => {
+        {categoryPills.map((cat) => {
           const Icon = cat.icon;
           const isSelected = selectedTrade === cat.id;
           return (
@@ -164,10 +175,48 @@ export const WorkerList: React.FC<WorkerListProps> = ({
             >
               <Icon className="w-4 h-4" />
               <span>{cat.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                {cat.count}
+              </span>
             </button>
           );
         })}
       </div>
+
+      {/* Category Highlight Details if category is selected */}
+      {activeCategoryMeta && (
+        <div className="bg-sky-50/70 border border-sky-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-sky-100 text-sky-700 shrink-0 mt-0.5">
+              <activeCategoryMeta.icon className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-sky-950 text-sm">{activeCategoryMeta.label}</span>
+                {activeCategoryMeta.isTeamBased && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-sky-200/80 text-sky-900 border border-sky-300">
+                    <Users className="w-3 h-3" />
+                    Crew Mode: {activeCategoryMeta.suggestedCrewSize}+ Technicians
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-600 mt-0.5">{activeCategoryMeta.description}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenNewRequest}
+            className="self-start sm:self-auto px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl text-xs shrink-0 transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-brand-200" />
+            <span>Post in {activeCategoryMeta.shortLabel}</span>
+          </button>
+        </div>
+      )}
 
       {/* 3. SEARCH & SORT CONTROLS BAR */}
       <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">

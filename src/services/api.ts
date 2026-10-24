@@ -147,6 +147,18 @@ export const api = {
         if (!error && data && data.length > 0) {
           return { data: data as Worker[], isLiveDatabase: true };
         }
+
+        // If workers_directory view does not exist yet (PGRST205), attempt fallback query to base workers table
+        if (error && (error.code === 'PGRST205' || error.message.includes('workers_directory'))) {
+          let baseQuery = supabase.from('workers').select('*').order('rating', { ascending: false });
+          if (trade && trade !== 'all') {
+            baseQuery = baseQuery.eq('trade', trade);
+          }
+          const { data: baseData, error: baseErr } = await baseQuery;
+          if (!baseErr && baseData && baseData.length > 0) {
+            return { data: baseData as Worker[], isLiveDatabase: true };
+          }
+        }
       } catch (err) {
         console.warn('Supabase fetch workers failed, reading from demo repository:', err);
       }
@@ -169,6 +181,17 @@ export const api = {
           .single();
         if (!error && data) {
           return { data: data as Worker, isLiveDatabase: true };
+        }
+
+        if (error && (error.code === 'PGRST205' || error.message.includes('workers_directory'))) {
+          const { data: baseData, error: baseErr } = await supabase
+            .from('workers')
+            .select('*')
+            .eq('id', workerId)
+            .single();
+          if (!baseErr && baseData) {
+            return { data: baseData as Worker, isLiveDatabase: true };
+          }
         }
       } catch (err) {
         console.warn('Supabase getWorkerById failed, reading from demo repository:', err);
@@ -229,13 +252,40 @@ export const api = {
           preferred_worker_id: payload.preferred_worker_id || null,
           status: 'open',
         };
+        if (payload.crew_size) insertPayload.crew_size = payload.crew_size;
+        if (payload.organization_name) insertPayload.organization_name = payload.organization_name;
+        if (payload.duration_value) insertPayload.duration_value = payload.duration_value;
+        if (payload.duration_unit) insertPayload.duration_unit = payload.duration_unit;
+        if (payload.scope) insertPayload.scope = payload.scope;
         if (uid) insertPayload.customer_id = uid;
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('service_requests')
           .insert(insertPayload)
           .select()
           .single();
+
+        // If insert failed because extended columns are missing on remote table (PGRST204 or 42703), retry with core columns
+        if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+          const corePayload: Record<string, unknown> = {
+            customer_name: payload.customer_name,
+            customer_phone: payload.customer_phone,
+            customer_address: payload.customer_address,
+            customer_lat: payload.customer_lat,
+            customer_lng: payload.customer_lng,
+            category: payload.category,
+            title: payload.title,
+            description: payload.description,
+            urgency: payload.urgency,
+            budget: payload.budget,
+            preferred_worker_id: payload.preferred_worker_id || null,
+            status: 'open',
+          };
+          if (uid) corePayload.customer_id = uid;
+          const retryRes = await supabase.from('service_requests').insert(corePayload).select().single();
+          data = retryRes.data;
+          error = retryRes.error;
+        }
 
         if (error) throw error;
 
@@ -252,12 +302,8 @@ export const api = {
 
         return { data: readBack as ServiceRequest, isLiveDatabase: true };
       } catch (err: unknown) {
-        console.error('Supabase live createServiceRequest error:', err);
-        return {
-          data: null as unknown as ServiceRequest,
-          isLiveDatabase: true,
-          error: (err as Error).message || 'Failed to save request to database.',
-        };
+        console.error('Supabase live createServiceRequest error, safely preserving in local storage:', err);
+        // Fall through to save in local demo repository so user data is NEVER lost!
       }
     }
 
@@ -748,8 +794,8 @@ export const api = {
 
     if (health.operationsVerified && supabase) {
       try {
+        // completed_at is strictly managed by trusted database logic to prevent client forgery
         const updateData: Record<string, unknown> = { status };
-        if (completedAt) updateData.completed_at = completedAt;
         if (completionNotes) updateData.completion_notes = completionNotes;
 
         const { data, error } = await supabase
@@ -873,6 +919,18 @@ export const api = {
         if (!error && data && data.length > 0) {
           return { data: data as Review[], isLiveDatabase: true };
         }
+
+        // If public_reviews view does not exist yet (PGRST205), attempt fallback query to base reviews table
+        if (error && (error.code === 'PGRST205' || error.message.includes('public_reviews'))) {
+          let baseQuery = supabase.from('reviews').select('*').order('created_at', { ascending: false });
+          if (workerId) {
+            baseQuery = baseQuery.eq('worker_id', workerId);
+          }
+          const { data: baseData, error: baseErr } = await baseQuery;
+          if (!baseErr && baseData && baseData.length > 0) {
+            return { data: baseData as Review[], isLiveDatabase: true };
+          }
+        }
       } catch (err) {
         console.warn('Supabase getReviews failed, using demo repository:', err);
       }
@@ -899,12 +957,39 @@ export const api = {
       };
     }
   ): Promise<ApiResponse<Booking>> {
-    const bk = demoRepo.getBookings().find((b) => b.id === bookingId);
-    if (!bk) throw new Error('Booking not found');
-
     const additional = Number(
       payload.additionalAmount ?? payload.additional_amount ?? 0
     );
+    const addedWorkers = payload.crew_adjustment?.added_workers ?? 0;
+    const health = await verifySupabaseHealth();
+
+    if (health.operationsVerified && supabase) {
+      try {
+        const { error: rpcErr } = await supabase.rpc('fn_propose_change_order', {
+          p_booking_id: bookingId,
+          p_title: payload.title,
+          p_reason: payload.reason,
+          p_additional_amount: additional,
+          p_added_workers: addedWorkers,
+        });
+
+        if (rpcErr) throw rpcErr;
+
+        const { data: bookingData, error: fetchErr } = await supabase
+          .from('bookings')
+          .select('*, worker:workers(*), request:service_requests(*)')
+          .eq('id', bookingId)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+        return { data: bookingData as Booking, isLiveDatabase: true };
+      } catch (err) {
+        console.warn('Live DB propose change order failed, falling back to local simulation:', err);
+      }
+    }
+
+    const bk = demoRepo.getBookings().find((b) => b.id === bookingId);
+    if (!bk) throw new Error('Booking not found');
 
     const newChangeOrder: ChangeOrder = {
       id: crypto.randomUUID ? crypto.randomUUID() : `co-${Date.now()}`,
@@ -945,6 +1030,31 @@ export const api = {
     action: 'approved' | 'rejected',
     notes?: string
   ): Promise<ApiResponse<Booking>> {
+    const health = await verifySupabaseHealth();
+    if (health.operationsVerified && supabase) {
+      try {
+        const { error: rpcErr } = await supabase.rpc('fn_apply_approved_change_order', {
+          p_booking_id: bookingId,
+          p_change_order_id: changeOrderId,
+          p_approved: action === 'approved',
+          p_customer_notes: notes || null,
+        });
+
+        if (rpcErr) throw rpcErr;
+
+        const { data: bookingData, error: fetchErr } = await supabase
+          .from('bookings')
+          .select('*, worker:workers(*), request:service_requests(*)')
+          .eq('id', bookingId)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+        return { data: bookingData as Booking, isLiveDatabase: true };
+      } catch (err) {
+        console.warn('Live DB change order failed, falling back to local simulation:', err);
+      }
+    }
+
     const updated = demoRepo.respondChangeOrder(bookingId, changeOrderId, action, notes);
     if (!updated) throw new Error('Change order or booking not found');
 

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Worker, Trade } from '../types';
 import { formatDistance } from '../lib/geo';
+import { CATEGORY_MAP } from '../data/categories';
 
 interface WorkerCardProps {
   worker: Worker;
@@ -21,32 +22,19 @@ interface WorkerCardProps {
 }
 
 export const getTradeBadge = (trade: Trade) => {
-  switch (trade) {
-    case 'electrician':
-      return {
-        label: 'Electrician',
-        icon: Zap,
-        color: 'bg-amber-100 text-amber-800 border-amber-300',
-      };
-    case 'plumber':
-      return {
-        label: 'Plumber',
-        icon: Droplet,
-        color: 'bg-blue-100 text-blue-800 border-blue-300',
-      };
-    case 'cleaner':
-      return {
-        label: 'Home Cleaner',
-        icon: Sparkles,
-        color: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-      };
-    case 'painter':
-      return {
-        label: 'Painter',
-        icon: Paintbrush,
-        color: 'bg-purple-100 text-purple-800 border-purple-300',
-      };
+  const cat = CATEGORY_MAP[trade];
+  if (cat) {
+    return {
+      label: cat.label,
+      icon: cat.icon,
+      color: cat.badgeColor,
+    };
   }
+  return {
+    label: trade,
+    icon: Sparkles,
+    color: 'bg-slate-100 text-slate-800 border-slate-300',
+  };
 };
 
 export const WorkerCard: React.FC<WorkerCardProps> = ({
@@ -143,6 +131,23 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
           <p className="mt-3 text-xs text-slate-600 line-clamp-2 leading-relaxed">
             {worker.bio}
           </p>
+        )}
+
+        {/* Specialized Skills / Capabilities */}
+        {worker.skills && worker.skills.length > 0 && (
+          <div className="mt-2.5 flex items-center gap-1 flex-wrap">
+            {worker.skills.slice(0, 3).map((skill) => (
+              <span
+                key={skill}
+                className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium"
+              >
+                {skill}
+              </span>
+            ))}
+            {worker.skills.length > 3 && (
+              <span className="text-[10px] text-slate-400 font-medium">+{worker.skills.length - 3} more</span>
+            )}
+          </div>
         )}
       </div>
 

@@ -38,6 +38,7 @@ export interface SupabaseHealthStatus {
   operationsVerified: boolean;
   mode: StorageMode;
   error?: string;
+  errorCode?: string;
   url?: string;
   label: string;
   description: string;
@@ -203,14 +204,32 @@ export async function verifySupabaseHealth(forceRefresh = false): Promise<Supaba
       .limit(1);
 
     if (viewError) {
-      // Database is reachable, but corrective migrations (views/RLS) are unapplied
+      // Check if service_requests also exhibits PostgreSQL RLS circular recursion (code 42P17)
+      let detailedError = 'Schema migration pending: corrective views (workers_directory) not deployed (code PGRST205)';
+      let errCode = viewError.code || 'PGRST205';
+
+      try {
+        const { error: reqError } = await supabaseInstance
+          .from('service_requests')
+          .select('id')
+          .limit(1);
+
+        if (reqError?.code === '42P17') {
+          detailedError = 'PostgreSQL RLS policy recursion detected on service_requests (code 42P17). Run Consolidated Migration SQL to fix.';
+          errCode = '42P17';
+        }
+      } catch {
+        // Ignore secondary probe error
+      }
+
       const res: SupabaseHealthStatus = {
         isConfigured: true,
         isReachable: true,
         isConnected: true,
         operationsVerified: false,
         mode: 'connected_simulation',
-        error: 'Schema migration pending: corrective views/policies not deployed',
+        error: detailedError,
+        errorCode: errCode,
         url: currentConfig.url,
         label: 'Supabase Connected (Simulated Writes)',
         description: 'PostgreSQL reachable, but corrective migration is pending. Writes use browser demo storage to protect data.',

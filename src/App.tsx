@@ -17,9 +17,12 @@ import { QuoteComparisonModal } from './components/QuoteComparisonModal';
 import { ProposeChangeOrderModal } from './components/ProposeChangeOrderModal';
 import { RepairPassportModal } from './components/RepairPassportModal';
 import { AuthModal } from './components/AuthModal';
+import { AIConciergeModal } from './components/AIConciergeModal';
+import { AIConciergeTrigger } from './components/AIConciergeTrigger';
 import { ToastContainer, ToastMessage } from './components/Toast';
 
 import { Worker, ServiceRequest, Quote, Booking, UserLocation, Review } from './types';
+import { DraftServiceRequest } from './services/ai/types';
 import { DEFAULT_LOCATION } from './lib/geo';
 import { api } from './services/api';
 import {
@@ -105,6 +108,17 @@ export function App() {
 
   const [repairPassportModalOpen, setRepairPassportModalOpen] = useState(false);
   const [selectedBookingForPassport, setSelectedBookingForPassport] = useState<Booking | null>(null);
+
+  // AI Concierge State
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiDraftForModal, setAiDraftForModal] = useState<DraftServiceRequest | null>(null);
+
+  const handleOpenPostRequestWithDraft = useCallback((draft: DraftServiceRequest) => {
+    setAiDraftForModal(draft);
+    setPreselectedWorker(null);
+    setAiModalOpen(false);
+    setPostRequestModalOpen(true);
+  }, []);
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -380,6 +394,7 @@ export function App() {
           }
         }}
         onOpenNewRequest={() => handleOpenPostRequest(null)}
+        onOpenAIModal={() => setAiModalOpen(true)}
       />
 
       {/* Persistent Hackathon & Database Notice Banner */}
@@ -521,10 +536,15 @@ export function App() {
         onClose={() => {
           setPostRequestModalOpen(false);
           setPreselectedWorker(null);
+          setAiDraftForModal(null);
         }}
         currentLocation={currentLocation}
         preselectedWorker={preselectedWorker}
-        onRequestCreated={handleRequestCreated}
+        initialDraft={aiDraftForModal}
+        onRequestCreated={(id) => {
+          setAiDraftForModal(null);
+          handleRequestCreated(id);
+        }}
       />
 
       <WorkerProfileModal
@@ -615,6 +635,18 @@ export function App() {
           setRepairPassportModalOpen(false);
           setSelectedBookingForPassport(null);
         }}
+      />
+
+      {/* SkillNear AI Concierge Floating Button & Conversational Modal */}
+      <AIConciergeTrigger
+        isOpen={aiModalOpen}
+        onClick={() => setAiModalOpen(true)}
+      />
+      <AIConciergeModal
+        isOpen={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onOpenRequestWithDraft={handleOpenPostRequestWithDraft}
+        userLocationName={currentLocation.address}
       />
 
       {/* Floating Notifications */}

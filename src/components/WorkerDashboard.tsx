@@ -56,9 +56,12 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({
 }) => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Filter requests matching this worker's trade
+  // Filter requests matching this worker's trade (including declared secondary capabilities)
   const tradeLeads = requests.filter(
-    (r) => r.category === worker.trade && r.status !== 'booked' && r.status !== 'completed'
+    (r) =>
+      (r.category === worker.trade || (worker.secondary_trades && worker.secondary_trades.includes(r.category))) &&
+      r.status !== 'booked' &&
+      r.status !== 'completed'
   );
 
   // Filter quotes submitted by this worker

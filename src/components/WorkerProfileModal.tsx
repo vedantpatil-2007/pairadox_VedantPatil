@@ -191,6 +191,36 @@ export const WorkerProfileModal: React.FC<WorkerProfileModalProps> = ({
           </div>
         )}
 
+        {/* Skills & Multi-Service Capabilities */}
+        {((worker.skills && worker.skills.length > 0) || (worker.secondary_trades && worker.secondary_trades.length > 0)) && (
+          <div className="space-y-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Verified Skills & Capabilities
+            </h4>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {worker.skills?.map((skill) => (
+                <span
+                  key={skill}
+                  className="px-2.5 py-1 text-xs font-medium bg-brand-50 text-brand-800 rounded-lg border border-brand-200"
+                >
+                  {skill}
+                </span>
+              ))}
+              {worker.secondary_trades?.map((secTrade) => {
+                const badge = getTradeBadge(secTrade);
+                return (
+                  <span
+                    key={secTrade}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg border ${badge.color}`}
+                  >
+                    + {badge.label}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Services & Rate Card */}
         <div className="space-y-2.5">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
